@@ -11,6 +11,7 @@ export default function SyncButton() {
   const [startDate, setStartDate] = useState(defaultDate);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [forceResync, setForceResync] = useState(false);
 
   const handleSync = async () => {
     setLoading(true);
@@ -21,7 +22,7 @@ export default function SyncButton() {
       const res = await fetch('/api/snaptrade/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate }),
+        body: JSON.stringify({ startDate, forceResync }),
       });
 
       if (!res.body) throw new Error("No response stream from server.");
@@ -61,7 +62,7 @@ export default function SyncButton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {/* Controls row */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <label style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>START DATE</label>
           <input
@@ -72,6 +73,17 @@ export default function SyncButton() {
             style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: 'var(--text-primary)', padding: '0.4rem 0.75rem', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
           />
         </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          <input 
+            type="checkbox" 
+            checked={forceResync} 
+            onChange={(e) => setForceResync(e.target.checked)}
+            disabled={loading}
+            style={{ cursor: 'pointer' }}
+          />
+          Force Full Resync (Wipe & Rebuild)
+        </label>
 
         <button
           className="btn btn-primary"

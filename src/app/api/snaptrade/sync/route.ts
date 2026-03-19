@@ -29,9 +29,11 @@ export async function POST(req: Request) {
 
       // Read dynamic start date from request body
       let startDate = "2024-01-01";
+      let forceResync = false;
       try {
         const body = await req.json().catch(() => ({}));
         if (body?.startDate) startDate = body.startDate;
+        if (body?.forceResync) forceResync = body.forceResync;
       } catch {}
 
       try {
@@ -40,6 +42,14 @@ export async function POST(req: Request) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) throw new Error('Unauthorized User Configuration');
+
+        if (forceResync) {
+          pushLog("! FORCE RESYNC: Wiping existing history to rebuild from scratch...");
+          // Delete all trades and positions for this user
+          await supabase.from('trades').delete().eq('user_id', user.id);
+          await supabase.from('positions').delete().eq('user_id', user.id);
+          pushLog("✅ Database clean. Ready to rebuild.");
+        }
 
         const clientId = process.env.SNAPTRADE_CLIENT_ID?.trim();
         const consumerKey = process.env.SNAPTRADE_CONSUMER_KEY?.trim();
