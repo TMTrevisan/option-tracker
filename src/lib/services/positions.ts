@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Database } from '../types';
+import { Database, Position } from '../types';
 
 type TradeInsert = Database['public']['Tables']['trades']['Insert'];
 
@@ -14,7 +14,7 @@ export async function linkTradeToPosition(
   const isOpening = ['BTO', 'STO', 'BUY'].includes(trade.trade_type);
   
   // Find an existing OPEN position for this underlying symbol mapping
-  const { data: openPositions } = await supabase
+  const { data } = await supabase
     .from('positions')
     .select('*')
     .eq('user_id', trade.user_id)
@@ -24,6 +24,7 @@ export async function linkTradeToPosition(
     .order('created_at', { ascending: false })
     .limit(1);
 
+  const openPositions = data as unknown as Position[];
   const positionId = openPositions?.[0]?.id;
 
   // Option multiplier (100 shares per contract)
@@ -35,6 +36,7 @@ export async function linkTradeToPosition(
     const premiumKept = (trade.trade_type === 'STO' || trade.trade_type === 'SELL') ? cashImpact : 0;
     const costBasis = (trade.trade_type === 'BTO' || trade.trade_type === 'BUY') ? cashImpact : 0;
 
+    // @ts-ignore - Bypass Supabase generic inference failure mapping on Vercel
     const { data: newPos } = await supabase.from('positions').insert({
       user_id: trade.user_id,
       asset_type: assetType,
@@ -50,12 +52,14 @@ export async function linkTradeToPosition(
       closed_quantity: 0,
       tags: trade.tags || []
     }).select().single();
-    
-    if (newPos) return newPos.id;
+
+    const pos = newPos as unknown as Position;
+    if (pos) return pos.id;
 
   } else if (positionId) {
     // 2. Append to an existing position (Roll, Close, Scale)
     const pos = openPositions![0];
+    let newStatus: 'OPEN' | 'CLOSED' | 'ASSIGNED' = 'OPEN';
     // Phase 5: FIFO Logic and Partial Scaling
     let newOpenQty = pos.open_quantity;
     let newClosedQty = pos.closed_quantity;
@@ -70,6 +74,15 @@ export async function linkTradeToPosition(
        newStatus = trade.trade_type === 'ASSIGNMENT' ? 'ASSIGNED' : 'CLOSED';
     }
 
+    let premiumAdjustment = 0;
+    let costAdjustment = 0;
+    
+    if (trade.trade_type === 'STO') premiumAdjustment += cashImpact;
+    if (trade.trade_type === 'BTC') premiumAdjustment -= cashImpact;
+    
+    if (trade.trade_type === 'BTO' || trade.trade_type === 'BUY') costAdjustment += cashImpact;
+    if (trade.trade_type === 'STC' || trade.trade_type === 'SELL') costAdjustment -= cashImpact;
+
     // Pl Calculation on close
     let realizedPl = pos.realized_pl;
     let isWashSale = pos.wash_sale_adjusted;
@@ -80,8 +93,8 @@ export async function linkTradeToPosition(
        // Wash Sale Check: Closed for a loss
        if (realizedPl < 0) {
           // Look for an identical open replacement position within 30 days
-          const { data: replacements } = await supabase.from('positions')
-            .select('id, adjusted_cost_basis')
+          const { data } = await supabase.from('positions')
+            .select('*')
             .eq('user_id', trade.user_id)
             .eq('symbol', trade.symbol)
             .eq('status', 'OPEN')
@@ -89,9 +102,12 @@ export async function linkTradeToPosition(
             .order('created_at', { ascending: false })
             .limit(1);
 
+          const replacements = data as unknown as Position[];
+
           if (replacements && replacements.length > 0) {
              const replacement = replacements[0];
              // Transfer the loss to the replacement's cost basis
+             // @ts-ignore - Bypass Supabase generic inference failure mapping on Vercel
              await supabase.from('positions').update({
                 adjusted_cost_basis: replacement.adjusted_cost_basis + Math.abs(realizedPl)
              }).eq('id', replacement.id);
@@ -104,6 +120,7 @@ export async function linkTradeToPosition(
 
     const uniqueTags = Array.from(new Set([...(pos.tags || []), ...(trade.tags || [])]));
 
+    // @ts-ignore - Bypass Supabase generic inference failure mapping on Vercel
     await supabase.from('positions').update({
        status: newStatus,
        total_fees: pos.total_fees + (trade.fees || 0),

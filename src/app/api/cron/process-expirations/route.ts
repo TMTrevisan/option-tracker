@@ -59,7 +59,8 @@ export async function GET(request: Request) {
              };
 
              await linkTradeToPosition(supabase, synthTrade);
-             await supabase.from('trades').insert(synthTrade);
+             // @ts-ignore - Bypass Supabase generic inference failure on vercel
+             await supabase.from('trades').insert(synthTrade as any);
              processedCount++;
           }
        }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { linkTradeToPosition } from '@/lib/services/positions';
-import { Database } from '@/lib/types';
+import { Database, BrokerageAccount } from '@/lib/types';
 import crypto from 'crypto';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -33,11 +33,13 @@ export async function POST(request: Request) {
     const execution = payload.data;
     
     // 3. Find User via Brokerage Account mapping
-    const { data: account } = await supabase
+    const { data } = await supabase
       .from('brokerage_accounts')
-      .select('user_id')
+      .select('*')
       .eq('id', execution.account_id)
       .single();
+
+    const account = data as unknown as BrokerageAccount;
 
     if (!account) {
       return NextResponse.json({ error: 'Account linkage detached' }, { status: 404 });
@@ -71,7 +73,8 @@ export async function POST(request: Request) {
     }
 
     // 6. Complete Data Insertion
-    const { error } = await supabase.from('trades').insert(tradeData);
+    // @ts-ignore - Bypass generic overload infer failure mapping
+    const { error } = await supabase.from('trades').insert(tradeData as any);
     if (error) throw error;
 
     return NextResponse.json({ success: true, position_id: positionId });
