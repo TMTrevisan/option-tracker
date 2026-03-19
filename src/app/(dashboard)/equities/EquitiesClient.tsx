@@ -114,16 +114,21 @@ function PositionModal({ position, onClose }: { position: Position; onClose: () 
   );
 }
 
-export default function EquitiesClient({ positions }: { positions: Position[] }) {
+export default function EquitiesClient({ positions, accounts = [] }: { positions: Position[]; accounts?: string[] }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [accountFilter, setAccountFilter] = useState('ALL');
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
 
   const filtered = useMemo(() => positions.filter(p => {
     if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+    if (accountFilter !== 'ALL') {
+      const hasAccount = (p.trades || []).some((t: any) => t.account_id === accountFilter);
+      if (!hasAccount) return false;
+    }
     return true;
-  }), [positions, search, statusFilter]);
+  }), [positions, search, statusFilter, accountFilter]);
 
   const totalRealizedPL = positions.filter(p => p.status === 'CLOSED').reduce((s, p) => s + (p.realized_pl ?? 0), 0);
   const totalCostBasis = positions.filter(p => p.status === 'OPEN').reduce((s, p) => s + (p.adjusted_cost_basis ?? 0), 0);
@@ -161,6 +166,14 @@ export default function EquitiesClient({ positions }: { positions: Position[] })
           <option value="OPEN">Open</option>
           <option value="CLOSED">Closed</option>
         </select>
+        {accounts.length > 1 && (
+          <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ ...inputStyle, minWidth: '160px' }}>
+            <option value="ALL">All Accounts</option>
+            {accounts.map(a => (
+              <option key={a} value={a}>{a.length > 20 ? `...${a.slice(-12)}` : a}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Table */}

@@ -75,8 +75,9 @@ export async function POST(req: Request) {
 
         const responses = await Promise.all(fetchPromises);
 
-        for (const activitiesResponse of responses) {
-            if (!activitiesResponse) continue;
+        responses.forEach((activitiesResponse, idx) => {
+            if (!activitiesResponse) return;
+            const account = accounts[idx];
 
             let rawActivities = activitiesResponse.data as any;
             if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.activities)) {
@@ -86,9 +87,14 @@ export async function POST(req: Request) {
             }
 
             if (Array.isArray(rawActivities)) {
-                allRawActivities = [...allRawActivities, ...rawActivities];
+                // Tag each activity with its source account
+                allRawActivities = [...allRawActivities, ...rawActivities.map((a: any) => ({
+                    ...a,
+                    _accountId: account.id,
+                    _accountName: account.name || (account as any).institution_name || account.id
+                }))];
             }
-        }
+        });
 
         if (allRawActivities.length === 0) {
             pushLog('✅ No historic activities found across any connected accounts.');
@@ -146,6 +152,7 @@ export async function POST(req: Request) {
               fees: trade.fee || 0,
               trade_date: trade.trade_date || trade.settlement_date || new Date().toISOString(),
               brokerage_trade_id: trade.id,
+              account_id: trade._accountId || null,
               notes: 'Auto-Imported from SnapTrade',
               tags: ['#historic-sync']
           };

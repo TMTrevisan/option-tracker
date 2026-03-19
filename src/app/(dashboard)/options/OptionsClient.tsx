@@ -15,6 +15,7 @@ type Trade = {
   strike_price?: number;
   notes?: string;
   position_id?: string;
+  account_id?: string;
 };
 
 type Position = {
@@ -228,13 +229,13 @@ function TickerGroup({ symbol, positions, ytdPL, onSelect }: {
   );
 }
 
-export default function OptionsClient({ positions }: { positions: Position[] }) {
+export default function OptionsClient({ positions, accounts = [] }: { positions: Position[]; accounts?: string[] }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [strategyFilter, setStrategyFilter] = useState('ALL');
+  const [accountFilter, setAccountFilter] = useState('ALL');
   const [sortKey, setSortKey] = useState<'symbol' | 'pl' | 'status' | 'date'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  // Modal state at the TOP level — renders above everything
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
 
   const toggleSort = (key: typeof sortKey) => {
@@ -252,6 +253,10 @@ export default function OptionsClient({ positions }: { positions: Position[] }) 
       if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
       if (strategyFilter !== 'ALL' && (p.strategy || 'Option Trade') !== strategyFilter) return false;
+      if (accountFilter !== 'ALL') {
+        const hasAccount = (p.trades || []).some(t => t.account_id === accountFilter);
+        if (!hasAccount) return false;
+      }
       return true;
     });
     arr = [...arr].sort((a, b) => {
@@ -265,7 +270,7 @@ export default function OptionsClient({ positions }: { positions: Position[] }) 
       return 0;
     });
     return arr;
-  }, [positions, search, statusFilter, strategyFilter, sortKey, sortDir]);
+  }, [positions, search, statusFilter, strategyFilter, accountFilter, sortKey, sortDir]);
 
   const grouped = useMemo(() => {
     const map: Record<string, Position[]> = {};
@@ -326,6 +331,14 @@ export default function OptionsClient({ positions }: { positions: Position[] }) 
           <option value="ALL">All Strategies</option>
           {allStrategies.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        {accounts.length > 1 && (
+          <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ ...inputStyle, minWidth: '160px' }}>
+            <option value="ALL">All Accounts</option>
+            {accounts.map(a => (
+              <option key={a} value={a}>{a.length > 20 ? `...${a.slice(-12)}` : a}</option>
+            ))}
+          </select>
+        )}
 
         {/* Sort chips */}
         <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>

@@ -6,19 +6,30 @@ export default async function EquitiesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: positions } = await supabase
-    .from('positions')
-    .select('*, trades(*)')
-    .eq('asset_type', 'EQUITY')
-    .eq('user_id', user?.id)
-    .order('created_at', { ascending: false });
+  const [positionsResult, accountsResult] = await Promise.all([
+    supabase
+      .from('positions')
+      .select('*, trades(*)')
+      .eq('asset_type', 'EQUITY')
+      .eq('user_id', user?.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('trades')
+      .select('account_id')
+      .eq('user_id', user?.id)
+      .not('account_id', 'is', null),
+  ]);
 
-  const enriched = (positions || []).map((p: any) => ({
+  const enriched = (positionsResult.data || []).map((p: any) => ({
     ...p,
     trades: (p.trades || []).sort((a: any, b: any) =>
       new Date(b.trade_date || 0).getTime() - new Date(a.trade_date || 0).getTime()
     ),
   }));
+
+  const allAccountIds = Array.from(
+    new Set((accountsResult.data || []).map((t: any) => t.account_id).filter(Boolean))
+  ) as string[];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -31,7 +42,7 @@ export default async function EquitiesPage() {
           + Log New Trade
         </Link>
       </div>
-      <EquitiesClient positions={enriched} />
+      <EquitiesClient positions={enriched} accounts={allAccountIds} />
     </div>
   );
 }
