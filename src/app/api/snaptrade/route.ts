@@ -28,7 +28,7 @@ export async function GET() {
     const userSecret = regData?.userSecret;
 
     if (!userSecret) {
-      return NextResponse.json({ error: 'SnapTrade registration failed. Check Consumer Key.' }, { status: 500 });
+      return NextResponse.json({ error: `SnapTrade registration failed. Raw response: ${JSON.stringify(regData)}` }, { status: 500 });
     }
 
     // 2. Generate secure Connection Portal URL
