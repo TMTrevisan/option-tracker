@@ -39,6 +39,10 @@ export default async function Sidebar() {
             <div className="text-xs text-muted">User</div>
           </div>
         </div>
+
+        <div style={{ marginTop: '0.5rem', textAlign: 'center', fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>
+          RollTrackr v1.0.1
+        </div>
       </nav>
     </aside>
   );

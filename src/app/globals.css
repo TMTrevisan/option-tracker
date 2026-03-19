@@ -219,3 +219,28 @@ body {
 .badge-purple { background: rgba(139, 92, 246, 0.1); color: var(--accent-purple); border: 1px solid rgba(139, 92, 246, 0.2); }
 .badge-warning { background: rgba(245, 158, 11, 0.1); color: var(--accent-warning); border: 1px solid rgba(245, 158, 11, 0.2); }
 .badge-dark { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
+/* Sidebar Navigation */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-link:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary) !important;
+}
+
+.sidebar-link.active {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--text-primary);
+}
+
+.sidebar-link.active:hover {
+  background-color: rgba(59, 130, 246, 0.15);
+}
