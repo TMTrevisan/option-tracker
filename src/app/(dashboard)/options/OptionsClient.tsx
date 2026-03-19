@@ -1,9 +1,10 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap, Plus } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 import { useToast } from '@/components/ToastProvider';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { calculateGreeks, getDTE } from '@/lib/utils/greeks';
 import CSVExportButton from '@/components/CSVExportButton';
 
@@ -89,19 +90,22 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
   const fees = position.total_fees ?? 0;
   const avgPrice = trades.length > 0 ? trades.reduce((s, t) => s + t.price, 0) / trades.length : 0;
   const statusColor = STATUS_COLORS[position.status] || '#6b7280';
-  const live = livePrices[position.symbol];
+  
+  // Find strike and expiration from trades
+  const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
+  const strike = optionTrade?.strike_price ?? 0;
+  const expiration = optionTrade?.expiration_date ?? '';
+  const optionType = (optionTrade?.option_type || 'CALL').toUpperCase() as 'CALL' | 'PUT';
+
+  const liveKey = `${position.symbol}|${strike}|${expiration}|${optionType}`;
+  const live = livePrices[liveKey] || livePrices[position.symbol]; // Fallback to symbol for equity/legacy
+
   const openPL = live?.option_open_pl ?? live?.open_pl;
   const mark = live?.option_mark ?? live?.price;
   const iv = live?.iv;
   const underlying = live?.underlying_price;
   const underPrice = underlying ?? 0;
   const ivValue = iv ?? 0;
-  
-  // Find strike and expiration from trades to calculate Greeks
-  const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
-  const strike = optionTrade?.strike_price ?? 0;
-  const expiration = optionTrade?.expiration_date ?? '';
-  const optionType = (optionTrade?.option_type || 'CALL').toUpperCase() as 'CALL' | 'PUT';
   
   const greeks = useMemo(() => {
     if (!underPrice || !strike || !expiration || !ivValue) return null;
@@ -186,8 +190,14 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.08em' }}>LIVE</span>
               {mark != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Mark <strong style={{ color: '#fff' }}>${mark.toFixed(2)}</strong></span>}
+              {live?.bid != null && live?.ask != null && (
+                <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Bid/Ask <strong style={{ color: '#fff' }}>${live.bid.toFixed(2)}/${live.ask.toFixed(2)}</strong></span>
+              )}
               {underPrice > 0 && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Underlying <strong style={{ color: '#fff' }}>${underPrice.toFixed(2)}</strong></span>}
               {ivValue > 0 && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>IV <strong style={{ color: '#f59e0b' }}>{(ivValue * 100).toFixed(1)}%</strong></span>}
+              {live?.open_interest != null && (
+                <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>OI <strong style={{ color: 'rgba(255,255,255,0.9)' }}>{live.open_interest.toLocaleString()}</strong></span>
+              )}
             </div>
             {greeks && (
               <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap', padding: '0.4rem 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
@@ -246,9 +256,9 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: '0.75rem' }}>
           {confirmDelete ? (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
               <button
                 onClick={() => setConfirmDelete(false)}
                 style={{ flex: 1, padding: '0.65rem', backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem' }}
@@ -264,12 +274,20 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
               </button>
             </div>
           ) : (
-            <button
-              onClick={handleDelete}
-              style={{ width: '100%', padding: '0.75rem', backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: '#f87171', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.875rem' }}
-            >
-              <Trash2 size={15} /> Delete Position
-            </button>
+            <>
+              <Link
+                href={`/log-trade?symbol=${position.symbol}&strategy=${encodeURIComponent(position.strategy || 'Option Trade')}`}
+                style={{ flex: 1, padding: '0.75rem', backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '8px', color: '#60a5fa', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.875rem', textDecoration: 'none' }}
+              >
+                <Plus size={15} /> Log Trade / Roll
+              </Link>
+              <button
+                onClick={handleDelete}
+                style={{ padding: '0.75rem', backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: '#f87171', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.875rem' }}
+              >
+                <Trash2 size={15} />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -331,7 +349,12 @@ function TickerGroup({ symbol, positions, ytdPL, onSelect, livePrices }: {
                 {pl >= 0 ? '+' : ''}${pl.toFixed(2)}
               </span>
             ) : (() => {
-              const lq = livePrices?.[pos.symbol];
+              const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
+              const strike = optionTrade?.strike_price;
+              const expiration = optionTrade?.expiration_date;
+              const type = (optionTrade?.option_type || 'CALL').toUpperCase();
+              const key = strike ? `${pos.symbol}|${strike}|${expiration}|${type}` : pos.symbol;
+              const lq = livePrices?.[key] || livePrices?.[pos.symbol];
               const openPL = lq?.option_open_pl ?? lq?.open_pl;
               if (openPL != null) return (
                 <span style={{ fontWeight: 700, fontSize: '0.8rem', color: openPL > 0 ? '#10b981' : openPL < 0 ? '#f87171' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -411,14 +434,42 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     return arr;
   }, [positions, search, statusFilter, strategyFilter, accountFilter, dateRange, sortKey, sortDir]);
 
-  const grouped = useMemo(() => {
+  const sortedGroups = useMemo(() => {
+    // 1. Group positions by symbol
     const map: Record<string, Position[]> = {};
     filtered.forEach(p => {
       if (!map[p.symbol]) map[p.symbol] = [];
       map[p.symbol].push(p);
     });
-    return map;
-  }, [filtered]);
+
+    // 2. Convert to array of [symbol, positions[]]
+    const entries = Object.entries(map);
+
+    // 3. Sort the groups
+    entries.sort(([symA, posA], [symB, posB]) => {
+      let va: any, vb: any;
+      if (sortKey === 'symbol') {
+        va = symA; vb = symB;
+      } else if (sortKey === 'pl') {
+        // Sort by total group P/L
+        va = posA.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
+        vb = posB.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
+      } else if (sortKey === 'date') {
+        // Sort by newest position in group
+        va = Math.max(...posA.map(p => new Date(p.created_at || 0).getTime()));
+        vb = Math.max(...posB.map(p => new Date(p.created_at || 0).getTime()));
+      } else {
+        // Status: just use the first position's status
+        va = posA[0].status; vb = posB[0].status;
+      }
+
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return entries;
+  }, [filtered, sortKey, sortDir]);
 
   const totalYtdPL = positions.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
 
@@ -506,12 +557,12 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
           </span>
         </div>
 
-        {Object.keys(grouped).length === 0 ? (
+        {sortedGroups.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '0.875rem' }}>
             {positions.length === 0 ? 'No option positions found.' : 'No positions match your filters.'}
           </div>
         ) : (
-          Object.entries(grouped).map(([symbol, symbolPositions]) => {
+          sortedGroups.map(([symbol, symbolPositions]) => {
             const ytdPL = symbolPositions.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
             return (
               <TickerGroup
@@ -529,3 +580,4 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     </>
   );
 }
+

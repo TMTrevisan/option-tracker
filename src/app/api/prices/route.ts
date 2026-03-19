@@ -107,28 +107,37 @@ export async function GET() {
       if (optionRes) {
         const optArr = Array.isArray(optionRes.data) ? optionRes.data : [];
         for (const opt of optArr) {
-          // Key by underlying symbol (e.g. "AAPL" not the OCC symbol)
-          const sym = opt.symbol?.option_symbol?.underlying_symbol?.symbol
-            ?? opt.symbol?.underlying_symbol?.symbol
-            ?? opt.symbol?.symbol;
+          const detail = opt.symbol?.option_symbol;
+          if (!detail) continue;
+
+          // Unique key: TICKER|STRIKE|EXP|TYPE
+          const sym = detail.underlying_symbol?.symbol || detail.ticker || opt.symbol?.symbol;
+          const strike = detail.strike_price || detail.strike;
+          const exp = detail.expiration_date || detail.expiration;
+          const type = (detail.option_type || detail.type || 'CALL').toUpperCase();
+          
           if (!sym) continue;
+          const key = `${sym}|${strike}|${exp}|${type}`;
 
           const mark = opt.price ?? 0;   // per share
-          const avgCost = opt.average_purchase_price ?? 0;  // per contract (÷100 to get per share)
-          const units = opt.units ?? 0;   // # of contracts (+long, -short)
+          const avgCost = opt.average_purchase_price ?? 0;  // per contract
+          const units = opt.units ?? 0;   // # of contracts
 
-          // Open P/L: (current mark - avg cost per share) × |units| × 100
-          // For short positions, P/L is inverted
           const avgCostPerShare = avgCost / 100;
           const rawPL = (mark - avgCostPerShare) * Math.abs(units) * 100;
           const optionOpenPL = units < 0 ? -rawPL : rawPL;
 
-          prices[sym] = {
-            ...prices[sym],
+          prices[key] = {
             option_mark: mark,
             option_avg_cost: avgCostPerShare,
             option_units: units,
             option_open_pl: optionOpenPL,
+            iv: detail.implied_volatility,
+            underlying_price: detail.underlying_price,
+            bid: opt.bid_price || opt.bid,
+            ask: opt.ask_price || opt.ask,
+            open_interest: opt.open_interest,
+            volume: opt.volume,
           };
         }
       }

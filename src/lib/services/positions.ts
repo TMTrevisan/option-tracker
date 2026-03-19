@@ -21,13 +21,22 @@ export async function linkTradeToPosition(
   const isOpening = ['BTO', 'STO', 'BUY', 'SHORT'].includes(tType);
   
   // Find an existing OPEN position for this underlying symbol mapping
-  const { data } = await supabase
+  // For options, we MUST match on strike, expiration, and type
+  let query = supabase
     .from('positions')
     .select('*')
     .eq('user_id', trade.user_id)
     .eq('symbol', trade.symbol)
     .eq('status', 'OPEN')
-    .eq('asset_type', assetType)
+    .eq('asset_type', assetType);
+
+  if (isOption) {
+    if (trade.strike_price) query = query.eq('strike_price', trade.strike_price);
+    if (trade.expiration_date) query = query.eq('expiration_date', trade.expiration_date);
+    if (trade.option_type) query = query.eq('option_type', trade.option_type);
+  }
+
+  const { data } = await query
     .order('created_at', { ascending: false })
     .limit(1);
 
@@ -39,18 +48,17 @@ export async function linkTradeToPosition(
   const cashImpact = trade.price * trade.quantity * multiplier;
 
   if (!positionId) {
-    // 1. Create a brand new position cluster (even if it's a SELL falling out of the synchronization boundary)
+    // 1. Create a brand new position cluster
     const premiumKept = (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') ? cashImpact : 0;
     const costBasis = (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') ? cashImpact : 0;
 
-    // @ts-ignore - Bypass Supabase generic inference failure mapping on Vercel
-    const { data: newPos } = await supabase.from('positions').insert({
+    const insertData: any = {
       user_id: trade.user_id,
       asset_type: assetType,
       symbol: trade.symbol,
       underlying_symbol: trade.symbol,
       strategy: strategy || (isOption ? 'Option Trade' : 'Long Stock'),
-      status: isOpening ? 'OPEN' : 'CLOSED', // Auto-close if we just instantiated an orphaned Historical SELL
+      status: isOpening ? 'OPEN' : 'CLOSED',
       adjusted_cost_basis: costBasis,
       total_premium_kept: premiumKept,
       total_fees: trade.fees || 0,
@@ -58,7 +66,17 @@ export async function linkTradeToPosition(
       open_quantity: isOpening ? trade.quantity : 0,
       closed_quantity: isOpening ? 0 : trade.quantity,
       tags: trade.tags || []
-    }).select().single();
+    };
+
+    if (isOption) {
+      if (trade.strike_price) insertData.strike_price = trade.strike_price;
+      if (trade.expiration_date) insertData.expiration_date = trade.expiration_date;
+      if (trade.option_type) insertData.option_type = trade.option_type;
+    }
+
+    // @ts-ignore - Bypass Supabase generic inference failure mapping on Vercel
+    const { data: newPos } = await supabase.from('positions').insert(insertData).select().single();
+
 
     const pos = newPos as unknown as Position;
     if (pos) {

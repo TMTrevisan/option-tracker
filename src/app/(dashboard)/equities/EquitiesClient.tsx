@@ -154,28 +154,67 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
   const [accountFilter, setAccountFilter] = useState('ALL');
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
+  const [sortKey, setSortKey] = useState<'symbol' | 'strategy' | 'qty' | 'cost' | 'status' | 'pl'>('symbol');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  const filtered = useMemo(() => positions.filter(p => {
-    if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
-    if (accountFilter !== 'ALL') {
-      const hasAccount = (p.trades || []).some((t: any) => t.account_id === accountFilter);
-      if (!hasAccount) return false;
-    }
-    if (dateRange.from || dateRange.to) {
-      const tradeDates = (p.trades || []).map((t: any) => t.trade_date).filter(Boolean);
-      const hasDateMatch = tradeDates.length > 0
-        ? tradeDates.some((d: string) => inDateRange(d, dateRange))
-        : inDateRange(p.created_at, dateRange);
-      if (!hasDateMatch) return false;
-    }
-    return true;
-  }), [positions, search, statusFilter, accountFilter, dateRange]);
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const filtered = useMemo(() => {
+    let arr = positions.filter(p => {
+      if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
+      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+      if (accountFilter !== 'ALL') {
+        const hasAccount = (p.trades || []).some((t: any) => t.account_id === accountFilter);
+        if (!hasAccount) return false;
+      }
+      if (dateRange.from || dateRange.to) {
+        const tradeDates = (p.trades || []).map((t: any) => t.trade_date).filter(Boolean);
+        const hasDateMatch = tradeDates.length > 0
+          ? tradeDates.some((d: string) => inDateRange(d, dateRange))
+          : inDateRange(p.created_at, dateRange);
+        if (!hasDateMatch) return false;
+      }
+      return true;
+    });
+
+    return [...arr].sort((a, b) => {
+      let va: any, vb: any;
+      switch (sortKey) {
+        case 'symbol': va = a.symbol; vb = b.symbol; break;
+        case 'strategy': va = a.strategy || 'Long Stock'; vb = b.strategy || 'Long Stock'; break;
+        case 'qty': va = a.open_quantity ?? 0; vb = b.open_quantity ?? 0; break;
+        case 'cost': va = a.adjusted_cost_basis ?? 0; vb = b.adjusted_cost_basis ?? 0; break;
+        case 'status': va = a.status; vb = b.status; break;
+        case 'pl': va = a.realized_pl ?? 0; vb = b.realized_pl ?? 0; break;
+        default: va = a.symbol; vb = b.symbol;
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [positions, search, statusFilter, accountFilter, dateRange, sortKey, sortDir]);
 
   const totalRealizedPL = positions.filter(p => p.status === 'CLOSED').reduce((s, p) => s + (p.realized_pl ?? 0), 0);
   const totalCostBasis = positions.filter(p => p.status === 'OPEN').reduce((s, p) => s + (p.adjusted_cost_basis ?? 0), 0);
   const openCount = positions.filter(p => p.status === 'OPEN').length;
   const inputStyle = { backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.875rem', padding: '0.6rem 1rem', outline: 'none' };
+
+  const SortHeader = ({ label, k }: { label: string; k: typeof sortKey }) => (
+    <th 
+      onClick={() => toggleSort(k)} 
+      style={{ padding: '0.875rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', transition: 'color 0.15s' }}
+      onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+      onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        {label}
+        {sortKey === k && <span style={{ fontSize: '0.7rem', color: 'var(--accent-primary)' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+      </div>
+    </th>
+  );
 
   return (
     <>
@@ -229,9 +268,12 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-              {['Symbol', 'Strategy', 'Open Qty', 'Cost Basis', 'Status', 'Realized P/L'].map(col => (
-                <th key={col} style={{ padding: '0.875rem 1.5rem', color: 'var(--text-muted)', fontWeight: 600 }}>{col}</th>
-              ))}
+              <SortHeader label="Symbol" k="symbol" />
+              <SortHeader label="Strategy" k="strategy" />
+              <SortHeader label="Open Qty" k="qty" />
+              <SortHeader label="Cost Basis" k="cost" />
+              <SortHeader label="Status" k="status" />
+              <SortHeader label="Realized P/L" k="pl" />
             </tr>
           </thead>
           <tbody>
