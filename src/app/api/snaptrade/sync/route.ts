@@ -24,30 +24,37 @@ export async function POST(req: Request) {
     
     if (accounts.length === 0) return NextResponse.json({ error: 'No brokerage accounts found.' }, { status: 400 });
 
-    const accountId = accounts[0].id;
+    let allRawActivities: any[] = [];
 
-    // Hardcode fetching from 2024 to skip ancient data for the MVP
-    const activitiesResponse = await snaptrade.accountInformation.getAccountActivities({ 
-        userId: user.id, 
-        userSecret: secret, 
-        accountId: accountId,
-        startDate: "2024-01-01" 
-    });
+    // Loop through every connected brokerage account so we don't miss any external platforms
+    for (const account of accounts) {
+        // Hardcode fetching from 2024 to skip ancient data for the MVP
+        const activitiesResponse = await snaptrade.accountInformation.getAccountActivities({ 
+            userId: user.id, 
+            userSecret: secret, 
+            accountId: account.id,
+            startDate: "2024-01-01" 
+        });
 
-    // Handle generic Object vs Array bypass
-    let rawActivities = activitiesResponse.data as any;
-    if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.activities)) {
-        rawActivities = rawActivities.activities;
-    } else if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.data)) {
-        rawActivities = rawActivities.data;
+        // Handle generic Object vs Array bypass
+        let rawActivities = activitiesResponse.data as any;
+        if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.activities)) {
+            rawActivities = rawActivities.activities;
+        } else if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.data)) {
+            rawActivities = rawActivities.data;
+        }
+
+        if (Array.isArray(rawActivities)) {
+            allRawActivities = [...allRawActivities, ...rawActivities];
+        }
     }
 
-    if (!Array.isArray(rawActivities)) {
-        return NextResponse.json({ error: 'SnapTrade returned non-iterable payload' }, { status: 500 });
+    if (allRawActivities.length === 0) {
+        return NextResponse.json({ success: true, message: 'No historic activities found across any connected accounts.' });
     }
 
     // Filter only BUY / SELL trade executions (ignore DIVIDEND, TRANSFER)
-    const validTrades = rawActivities.filter((a: any) => a.type && /BUY|SELL/i.test(a.type));
+    const validTrades = allRawActivities.filter((a: any) => a.type && /BUY|SELL/i.test(a.type));
 
     let insertedCount = 0;
 
@@ -113,7 +120,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
         success: true, 
-        message: `✅ Historic Sync Complete!\n\nAnalyzed: ${rawActivities.length} account activities.\nIgnored: ${rawActivities.length - validTrades.length} non-trade events (dividends, ACAT transfers).\nImported: ${insertedCount} new executable trades.\nBypassed: ${validTrades.length - insertedCount} safely deduplicated trades.` 
+        message: `✅ Historic Sync Complete!\n\nAnalyzed: ${allRawActivities.length} account activities.\nIgnored: ${allRawActivities.length - validTrades.length} non-trade events (dividends, ACAT transfers).\nImported: ${insertedCount} new executable trades.\nBypassed: ${validTrades.length - insertedCount} safely deduplicated trades.` 
     });
 
   } catch (error: any) {
