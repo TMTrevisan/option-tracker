@@ -24,12 +24,21 @@ export async function GET() {
   });
 
   try {
-    // 1. Register User on SnapTrade
-    const registerResponse = await snaptrade.authentication.registerSnapTradeUser({ userId: user.id });
-    const userSecret = registerResponse.data?.userSecret;
+    let userSecret = user.user_metadata?.snaptrade_secret;
 
     if (!userSecret) {
-      return NextResponse.json({ error: `SnapTrade registration failed. Raw response: ${JSON.stringify(registerResponse.data)}` }, { status: 500 });
+      // 1. Register User on SnapTrade
+      const registerResponse = await snaptrade.authentication.registerSnapTradeUser({ userId: user.id });
+      userSecret = registerResponse.data?.userSecret;
+
+      if (!userSecret) {
+        return NextResponse.json({ error: `SnapTrade registration failed. Raw response: ${JSON.stringify(registerResponse.data)}` }, { status: 500 });
+      }
+
+      // Persist the secret to Supabase so we never query the quota again
+      await supabase.auth.updateUser({
+        data: { snaptrade_secret: userSecret }
+      });
     }
 
     // 2. Generate secure Connection Portal URL

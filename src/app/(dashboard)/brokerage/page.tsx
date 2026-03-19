@@ -15,9 +15,8 @@ export default async function BrokeragePage() {
   if (user && clientId && consumerKey) {
     const snaptrade = new Snaptrade({ clientId, consumerKey });
     try {
-      // 1. Fetch idempotently generated User Secret
-      const reg = await snaptrade.authentication.registerSnapTradeUser({ userId: user.id });
-      const secret = reg.data?.userSecret;
+      // 1. Read the securely persisted User Secret
+      const secret = user.user_metadata?.snaptrade_secret;
 
       if (secret) {
         // 2. Fetch all Robinhood/Webull accounts tied to this user!
