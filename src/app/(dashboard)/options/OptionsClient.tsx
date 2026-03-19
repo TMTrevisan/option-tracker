@@ -474,7 +474,21 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     return entries;
   }, [filtered, sortKey, sortDir]);
 
-  const totalYtdPL = positions.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
+  const totalRealizedPL = filtered.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
+  const totalOpenPL = useMemo(() => {
+    return filtered.reduce((acc, p) => {
+      if (p.status !== 'OPEN') return acc;
+      const trades = p.trades || [];
+      const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
+      const strike = optionTrade?.strike_price;
+      const expiration = optionTrade?.expiration_date;
+      const type = (optionTrade?.option_type || 'CALL').toUpperCase();
+      const key = strike ? `${p.symbol}|${strike}|${expiration}|${type}` : p.symbol;
+      const lq = livePrices[key] || livePrices[p.symbol];
+      const val = lq?.option_open_pl ?? lq?.open_pl ?? 0;
+      return acc + val;
+    }, 0);
+  }, [filtered, livePrices]);
 
   const inputStyle: React.CSSProperties = {
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -552,12 +566,27 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
             <BookOpen size={16} />
             Trades by Ticker
           </div>
-          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
-            YTD P/L:{' '}
-            <strong style={{ color: totalYtdPL >= 0 ? '#10b981' : '#f87171' }}>
-              {totalYtdPL >= 0 ? '+' : ''}${totalYtdPL.toFixed(2)}
-            </strong>
-          </span>
+          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
+              Realized P/L:{' '}
+              <strong style={{ color: totalRealizedPL >= 0 ? '#10b981' : '#f87171' }}>
+                {totalRealizedPL >= 0 ? '+' : ''}${totalRealizedPL.toFixed(2)}
+              </strong>
+            </span>
+            <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
+              Open P/L:{' '}
+              <strong style={{ color: totalOpenPL >= 0 ? '#10b981' : '#f87171' }}>
+                {totalOpenPL >= 0 ? '+' : ''}${totalOpenPL.toFixed(2)}
+              </strong>
+            </span>
+            <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+              Total:{' '}
+              <span style={{ color: (totalRealizedPL + totalOpenPL) >= 0 ? '#10b981' : '#f87171' }}>
+                {(totalRealizedPL + totalOpenPL) >= 0 ? '+' : ''}${(totalRealizedPL + totalOpenPL).toFixed(2)}
+              </span>
+            </span>
+          </div>
         </div>
 
         {sortedGroups.length === 0 ? (
