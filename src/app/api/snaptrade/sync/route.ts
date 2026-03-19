@@ -3,6 +3,19 @@ import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { NextResponse } from 'next/server';
 import { linkTradeToPosition } from '@/lib/services/positions';
 
+// Auto-classify strategy from trade type + option type
+function classifyStrategy(tradeType: string, optionType: string | null, hasPair: boolean): string {
+  const tt = tradeType.toUpperCase();
+  const ot = (optionType || '').toUpperCase();
+  if (ot === 'CALL' && tt === 'BUY') return 'Long Call';
+  if (ot === 'CALL' && tt === 'SELL') return 'Covered Call';
+  if (ot === 'PUT' && tt === 'SELL') return 'Short Put';
+  if (ot === 'PUT' && tt === 'BUY') return 'Long Put';
+  if (tt === 'BUY') return 'Long Stock';
+  if (tt === 'SELL') return 'Short Stock';
+  return 'Option Trade';
+}
+
 export async function POST(req: Request) {
   const encoder = new TextEncoder();
   
@@ -11,6 +24,13 @@ export async function POST(req: Request) {
       const pushLog = (msg: string) => {
         controller.enqueue(encoder.encode(msg + '\n'));
       };
+
+      // Read dynamic start date from request body
+      let startDate = "2024-01-01";
+      try {
+        const body = await req.json().catch(() => ({}));
+        if (body?.startDate) startDate = body.startDate;
+      } catch {}
 
       try {
         pushLog("> Booting RollTrackr Scraping Engine...");
@@ -46,7 +66,7 @@ export async function POST(req: Request) {
               userId: user.id, 
               userSecret: secret, 
               accountId: account.id,
-              startDate: "2024-01-01" 
+              startDate: startDate
           }).catch(err => {
               pushLog(`! Warning: Failed fetching ledger for Broker Profile ${account.id}`);
               return null;
@@ -134,16 +154,31 @@ export async function POST(req: Request) {
           if (expiration_date) (tradeInsert as any).expiration_date = expiration_date;
           if (option_type) (tradeInsert as any).option_type = option_type;
 
-          const positionId = await linkTradeToPosition(supabase, tradeInsert as any);
+          const strategy = classifyStrategy(tt, option_type, false);
+          const positionId = await linkTradeToPosition(supabase, tradeInsert as any, strategy);
           if (positionId) {
               (tradeInsert as any).position_id = positionId;
           }
 
-          const { error } = await supabase.from('trades').insert(tradeInsert as any);
+          const { error, data: insertedTrade } = await supabase
+            .from('trades')
+            .insert(tradeInsert as any)
+            .select('id')
+            .single();
           
-          if (!error) insertedCount++;
-          else if (error.code !== '23505') {
-              throw new Error(`Database Constraint Violation (${error.code}): ${error.message}`);
+          if (!error) {
+            insertedCount++;
+          } else if (error.code === '23505') {
+            // Duplicate — but backfill position_id if the existing row has none
+            if (positionId) {
+              await supabase
+                .from('trades')
+                .update({ position_id: positionId })
+                .eq('brokerage_trade_id', (tradeInsert as any).brokerage_trade_id)
+                .is('position_id', null);
+            }
+          } else {
+            throw new Error(`Database Error (${error.code}): ${error.message}`);
           }
         }
 

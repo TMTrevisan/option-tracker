@@ -88,14 +88,6 @@ export default async function BrokeragePage() {
                </ul>
              </div>
 
-             <div className="mb-4">
-               <label className="text-sm font-semibold mb-2 block">Import Start Date <span className="text-muted font-normal">(end date is always today)</span></label>
-               <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.5rem 1rem', gap: '0.5rem' }}>
-                 <Calendar size={18} className="text-muted" />
-                 <input type="date" defaultValue="2026-02-17" style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer' }} />
-               </div>
-             </div>
-
              <SyncButton />
           </div>
         </div>

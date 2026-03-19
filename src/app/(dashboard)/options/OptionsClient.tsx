@@ -232,20 +232,40 @@ export default function OptionsClient({ positions }: { positions: Position[] }) 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [strategyFilter, setStrategyFilter] = useState('ALL');
+  const [sortKey, setSortKey] = useState<'symbol' | 'pl' | 'status' | 'date'>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   // Modal state at the TOP level — renders above everything
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('desc'); }
+  };
 
   const allStrategies = useMemo(() => {
     const set = new Set(positions.map(p => p.strategy || 'Option Trade'));
     return Array.from(set).sort();
   }, [positions]);
 
-  const filtered = useMemo(() => positions.filter(p => {
-    if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
-    if (strategyFilter !== 'ALL' && (p.strategy || 'Option Trade') !== strategyFilter) return false;
-    return true;
-  }), [positions, search, statusFilter, strategyFilter]);
+  const filtered = useMemo(() => {
+    let arr = positions.filter(p => {
+      if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
+      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+      if (strategyFilter !== 'ALL' && (p.strategy || 'Option Trade') !== strategyFilter) return false;
+      return true;
+    });
+    arr = [...arr].sort((a, b) => {
+      let va: any, vb: any;
+      if (sortKey === 'symbol') { va = a.symbol; vb = b.symbol; }
+      else if (sortKey === 'pl') { va = a.realized_pl ?? 0; vb = b.realized_pl ?? 0; }
+      else if (sortKey === 'status') { va = a.status; vb = b.status; }
+      else { va = a.created_at || ''; vb = b.created_at || ''; }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [positions, search, statusFilter, strategyFilter, sortKey, sortDir]);
 
   const grouped = useMemo(() => {
     const map: Record<string, Position[]> = {};
@@ -267,6 +287,16 @@ export default function OptionsClient({ positions }: { positions: Position[] }) 
     padding: '0.55rem 1rem',
     outline: 'none',
   };
+
+  const SortChip = ({ label, k }: { label: string; k: typeof sortKey }) => (
+    <button
+      onClick={() => toggleSort(k)}
+      style={{ padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer', border: '1px solid', borderColor: sortKey === k ? 'rgba(96,165,250,0.5)' : 'rgba(255,255,255,0.1)', backgroundColor: sortKey === k ? 'rgba(96,165,250,0.12)' : 'transparent', color: sortKey === k ? '#60a5fa' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+    >
+      {label}
+      {sortKey === k && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+    </button>
+  );
 
   return (
     <>
@@ -296,6 +326,15 @@ export default function OptionsClient({ positions }: { positions: Position[] }) 
           <option value="ALL">All Strategies</option>
           {allStrategies.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+
+        {/* Sort chips */}
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>
+          <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', marginRight: '0.25rem' }}>SORT</span>
+          <SortChip label="Date" k="date" />
+          <SortChip label="P/L" k="pl" />
+          <SortChip label="Symbol" k="symbol" />
+          <SortChip label="Status" k="status" />
+        </div>
       </div>
 
       {/* Grouped Table */}
