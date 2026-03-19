@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { Database, Position } from '@/lib/types';
+import { Database, Position, Trade } from '@/lib/types';
 import { linkTradeToPosition } from '@/lib/services/positions';
 
 const supabase = createClient<Database>(
@@ -32,11 +32,13 @@ export async function GET(request: Request) {
 
     for (const pos of openOptions) {
        // Query the atomic opening trade to find the expiration date
-       const { data: trades } = await supabase
+       const { data } = await supabase
          .from('trades')
          .select('*')
          .eq('position_id', pos.id)
          .limit(1);
+
+       const trades = data as unknown as Trade[];
 
        if (trades && trades.length > 0 && trades[0].expiration_date) {
           const expDate = new Date(trades[0].expiration_date);
