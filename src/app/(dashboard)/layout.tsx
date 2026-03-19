@@ -1,6 +1,7 @@
 import Sidebar from "@/components/Sidebar";
 import TopHeader from "@/components/TopHeader";
 import StoreInitializer from "@/components/StoreInitializer";
+import MobileSidebarWrapper from "@/components/MobileSidebarWrapper";
 
 export default function DashboardLayout({
   children,
@@ -10,7 +11,9 @@ export default function DashboardLayout({
   return (
     <div className="app-container">
       <StoreInitializer />
-      <Sidebar />
+      <MobileSidebarWrapper>
+        <Sidebar />
+      </MobileSidebarWrapper>
       <main className="main-content">
         <TopHeader />
         <div className="page-container">

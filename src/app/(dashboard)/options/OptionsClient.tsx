@@ -151,7 +151,7 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
       onClick={onClose}
     >
       <div
-        style={{ backgroundColor: '#0f1117', borderRadius: '16px', width: '100%', maxWidth: '620px', maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+        className="modal-content"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -168,7 +168,7 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
         </div>
 
         {/* Stats Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="stats-grid">
           {[
             { label: position.status === 'OPEN' ? 'OPEN P/L' : 'NET P/L',
               value: position.status === 'OPEN'
@@ -518,7 +518,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
       )}
 
       {/* Filter Bar */}
-      <div className="card" style={{ padding: '1rem 1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="card filter-bar">
         <div style={{ position: 'relative', flex: 1, minWidth: '180px' }}>
           <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
           <input
@@ -550,7 +550,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
         <CSVExportButton data={filtered} filename={`options_positions_${new Date().toISOString().split('T')[0]}`} />
 
         {/* Sort chips */}
-        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', marginRight: '0.25rem' }}>SORT</span>
           <SortChip label="Date" k="date" />
           <SortChip label="P/L" k="pl" />
@@ -561,12 +561,12 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
 
       {/* Grouped Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
             <BookOpen size={16} />
             Trades by Ticker
           </div>
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          <div className="header-actions">
             <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
               Realized P/L:{' '}
               <strong style={{ color: totalRealizedPL >= 0 ? '#10b981' : '#f87171' }}>
@@ -579,7 +579,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
                 {totalOpenPL >= 0 ? '+' : ''}${totalOpenPL.toFixed(2)}
               </strong>
             </span>
-            <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+            <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} className="hidden lg:block" />
             <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
               Total:{' '}
               <span style={{ color: (totalRealizedPL + totalOpenPL) >= 0 ? '#10b981' : '#f87171' }}>

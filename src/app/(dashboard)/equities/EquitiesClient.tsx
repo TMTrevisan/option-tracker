@@ -265,38 +265,40 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
           <span style={{ fontWeight: 600 }}>All Equity Positions</span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{filtered.length} positions</span>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-              <SortHeader label="Symbol" k="symbol" />
-              <SortHeader label="Strategy" k="strategy" />
-              <SortHeader label="Open Qty" k="qty" />
-              <SortHeader label="Cost Basis" k="cost" />
-              <SortHeader label="Status" k="status" />
-              <SortHeader label="Realized P/L" k="pl" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No equity positions match your filters.</td></tr>
-            ) : filtered.map(pos => (
-              <tr key={pos.id} onClick={() => setSelectedPosition(pos)} style={{ borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                <td style={{ padding: '1rem 1.5rem', fontWeight: 700 }}>{pos.symbol}</td>
-                <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>{pos.strategy || 'Long Stock'}</td>
-                <td style={{ padding: '1rem 1.5rem' }}>{pos.open_quantity ?? '—'}</td>
-                <td style={{ padding: '1rem 1.5rem', fontWeight: 600 }}>{pos.adjusted_cost_basis != null ? `$${Number(pos.adjusted_cost_basis).toFixed(2)}` : '—'}</td>
-                <td style={{ padding: '1rem 1.5rem' }}>
-                  <span style={{ backgroundColor: pos.status === 'OPEN' ? '#3b82f633' : '#6b728033', border: `1px solid ${pos.status === 'OPEN' ? '#3b82f655' : '#6b728055'}`, color: pos.status === 'OPEN' ? '#3b82f6' : '#9ca3af', borderRadius: '10px', padding: '0.2rem 0.6rem', fontSize: '0.7rem', fontWeight: 700 }}>
-                    {pos.status}
-                  </span>
-                </td>
-                <td style={{ padding: '1rem 1.5rem', fontWeight: 600, color: (pos.realized_pl ?? 0) > 0 ? '#10b981' : (pos.realized_pl ?? 0) < 0 ? '#f87171' : 'var(--text-muted)' }}>
-                  {pos.status === 'OPEN' ? <span style={{ color: 'var(--text-muted)' }}>Open</span> : `${(pos.realized_pl ?? 0) >= 0 ? '+' : ''}$${Math.abs(pos.realized_pl ?? 0).toFixed(2)}`}
-                </td>
+        <div className="table-responsive">
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem', minWidth: '600px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                <SortHeader label="Symbol" k="symbol" />
+                <SortHeader label="Strategy" k="strategy" />
+                <SortHeader label="Open Qty" k="qty" />
+                <SortHeader label="Cost Basis" k="cost" />
+                <SortHeader label="Status" k="status" />
+                <SortHeader label="Realized P/L" k="pl" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No equity positions match your filters.</td></tr>
+              ) : filtered.map(pos => (
+                <tr key={pos.id} onClick={() => setSelectedPosition(pos)} style={{ borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                  <td style={{ padding: '1rem 1.5rem', fontWeight: 700 }}>{pos.symbol}</td>
+                  <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>{pos.strategy || 'Long Stock'}</td>
+                  <td style={{ padding: '1rem 1.5rem' }}>{pos.open_quantity ?? '—'}</td>
+                  <td style={{ padding: '1rem 1.5rem', fontWeight: 600 }}>{pos.adjusted_cost_basis != null ? `$${Number(pos.adjusted_cost_basis).toFixed(2)}` : '—'}</td>
+                  <td style={{ padding: '1rem 1.5rem' }}>
+                    <span style={{ backgroundColor: pos.status === 'OPEN' ? '#3b82f633' : '#6b728033', border: `1px solid ${pos.status === 'OPEN' ? '#3b82f655' : '#6b728055'}`, color: pos.status === 'OPEN' ? '#3b82f6' : '#9ca3af', borderRadius: '10px', padding: '0.2rem 0.6rem', fontSize: '0.7rem', fontWeight: 700 }}>
+                      {pos.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '1rem 1.5rem', fontWeight: 600, color: (pos.realized_pl ?? 0) > 0 ? '#10b981' : (pos.realized_pl ?? 0) < 0 ? '#f87171' : 'var(--text-muted)' }}>
+                    {pos.status === 'OPEN' ? <span style={{ color: 'var(--text-muted)' }}>Open</span> : `${(pos.realized_pl ?? 0) >= 0 ? '+' : ''}$${Math.abs(pos.realized_pl ?? 0).toFixed(2)}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

@@ -208,6 +208,56 @@ export async function POST(req: Request) {
         pushLog(`Imported: ${insertedCount} new executable transactions.`);
         pushLog(`Bypassed: ${validTrades.length - insertedCount} safely deduplicated trades.`);
         
+        // --- EXPIRATION SWEEP ---
+        pushLog(`\n> Sweeping for expired option contracts...`);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const { data: openOptions } = await supabase
+          .from('positions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('asset_type', 'OPTION')
+          .eq('status', 'OPEN');
+
+        let expiredCount = 0;
+        if (openOptions && openOptions.length > 0) {
+           for (const pos of openOptions) {
+             if (pos.expiration_date && pos.expiration_date < todayStr) {
+                const qtyToClose = (pos.open_quantity || 0) - (pos.closed_quantity || 0);
+                if (qtyToClose <= 0) continue;
+
+                const isLong = pos.side === 'LONG';
+                const closeAction = isLong ? 'STC' : 'BTC';
+
+                const synthTrade = {
+                   user_id: user.id,
+                   trade_type: closeAction,
+                   symbol: pos.symbol,
+                   quantity: qtyToClose,
+                   price: 0, // Expired worthless
+                   fees: 0,
+                   trade_date: pos.expiration_date + 'T20:00:00Z', // Market close on exp day
+                   notes: 'Auto-Expired Worthless by Sync Engine',
+                   tags: ['#expired'],
+                   strike_price: pos.strike_price,
+                   expiration_date: pos.expiration_date,
+                   option_type: pos.option_type,
+                };
+
+                const positionId = await linkTradeToPosition(supabase, synthTrade as any);
+                if (positionId) {
+                   (synthTrade as any).position_id = positionId;
+                   await supabase.from('trades').insert(synthTrade as any);
+                   expiredCount++;
+                }
+             }
+           }
+        }
+        if (expiredCount > 0) {
+           pushLog(`✅ Successfully closed ${expiredCount} expired option positions.`);
+        } else {
+           pushLog(`✅ No expired positions found.`);
+        }
+
         controller.close();
       } catch (error: any) {
         pushLog(`\n❌ ERROR: ${error.message}`);
