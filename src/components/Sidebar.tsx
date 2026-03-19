@@ -1,0 +1,65 @@
+import Link from 'next/link';
+import { LayoutDashboard, Plus, TrendingUp, BarChart2, Briefcase, MessageSquare, Settings } from 'lucide-react';
+import { createClient } from '@/utils/supabase/server';
+
+export default async function Sidebar() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'D';
+  const displayEmail = user?.email || 'Not logged in';
+  return (
+    <aside className="sidebar">
+      <div style={{ padding: '2rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--accent-primary)' }} />
+        <h1 className="text-xl font-bold">RollTrackr</h1>
+      </div>
+      
+      <nav style={{ display: 'flex', flexDirection: 'column', padding: '0 1rem', gap: '0.5rem', marginTop: '1rem' }}>
+        <SidebarLink href="/" icon={<LayoutDashboard size={20} />} label="Dashboard" active />
+        <SidebarLink href="/log-trade" icon={<Plus size={20} />} label="Log Trade" />
+        <SidebarLink href="/options" icon={<TrendingUp size={20} />} label="Options" />
+        <SidebarLink href="/equities" icon={<BarChart2 size={20} />} label="Equities" />
+        <SidebarLink href="/brokerage" icon={<Briefcase size={20} />} label="Brokerage" />
+      </nav>
+
+      <div style={{ flex: 1 }} />
+      
+      <nav style={{ display: 'flex', flexDirection: 'column', padding: '1rem', gap: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+        <SidebarLink href="/support" icon={<MessageSquare size={20} />} label="Support" />
+        <SidebarLink href="/settings" icon={<Settings size={20} />} label="Settings" />
+        
+        <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+            {userInitial}
+          </div>
+          <div style={{ overflow: 'hidden' }}>
+            <div className="text-sm font-medium" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{displayEmail}</div>
+            <div className="text-xs text-muted">User</div>
+          </div>
+        </div>
+      </nav>
+    </aside>
+  );
+}
+
+function SidebarLink({ href, icon, label, active = false }: { href: string; icon: React.ReactNode; label: string; active?: boolean }) {
+  return (
+    <Link href={href} style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.75rem',
+      padding: '0.75rem 1rem',
+      borderRadius: 'var(--radius-md)',
+      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+      backgroundColor: active ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+      textDecoration: 'none',
+      transition: 'var(--transition-fast)'
+    }}>
+      <div style={{ color: active ? 'var(--accent-primary)' : 'inherit' }}>
+        {icon}
+      </div>
+      <span className="font-medium text-sm">{label}</span>
+      {active && <div style={{ marginLeft: 'auto', width: '3px', height: '16px', background: 'var(--accent-primary)', borderRadius: 'var(--radius-sm)' }} />}
+    </Link>
+  );
+}
