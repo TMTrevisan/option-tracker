@@ -2,6 +2,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
+import { useToast } from '@/components/ToastProvider';
+import { useRouter } from 'next/navigation';
 
 type LiveQuote = {
   price?: number;
@@ -90,6 +92,34 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
   const mark = live?.option_mark ?? live?.price;
   const iv = live?.iv;
   const underlying = live?.underlying_price;
+  const { toast } = useToast();
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/positions/${position.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast(`Position ${position.symbol} deleted.`, 'success');
+        onClose();
+        router.refresh();
+      } else {
+        const data = await res.json();
+        toast(data.error || 'Failed to delete position.', 'error');
+      }
+    } catch {
+      toast('Network error — could not delete position.', 'error');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   return (
     <div
@@ -190,9 +220,30 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
 
         {/* Footer */}
         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <button style={{ width: '100%', padding: '0.75rem', backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: '#f87171', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-            <Trash2 size={15} /> Delete Position
-          </button>
+          {confirmDelete ? (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{ flex: 1, padding: '0.65rem', backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ flex: 2, padding: '0.65rem', backgroundColor: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '8px', color: '#f87171', fontWeight: 700, cursor: deleting ? 'not-allowed' : 'pointer', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              >
+                {deleting ? 'Deleting...' : '⚠️ Confirm Delete'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleDelete}
+              style={{ width: '100%', padding: '0.75rem', backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: '#f87171', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.875rem' }}
+            >
+              <Trash2 size={15} /> Delete Position
+            </button>
+          )}
         </div>
       </div>
     </div>

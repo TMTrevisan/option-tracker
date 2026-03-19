@@ -1,8 +1,9 @@
 import { createClient } from '@/utils/supabase/server';
 import { Snaptrade } from 'snaptrade-typescript-sdk';
-import { RefreshCw, Trash2, Calendar, DownloadCloud, Building } from 'lucide-react';
+import { Building, Trash2 } from 'lucide-react';
 import AddAccountButton from './AddAccountButton';
 import SyncButton from './SyncButton';
+import RefreshAccountsButton from './RefreshAccountsButton';
 
 export default async function BrokeragePage() {
   const supabase = await createClient();
@@ -50,10 +51,7 @@ export default async function BrokeragePage() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-base font-semibold">Connected Accounts ({liveAccounts.length})</h2>
             <div className="flex gap-2">
-              <button className="btn btn-secondary">
-                <RefreshCw size={16} />
-                Refresh
-              </button>
+              <RefreshAccountsButton />
               <AddAccountButton />
             </div>
           </div>
