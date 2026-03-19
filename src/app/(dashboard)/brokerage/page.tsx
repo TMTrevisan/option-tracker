@@ -8,13 +8,13 @@ export default function BrokeragePage() {
     try {
       const res = await fetch('/api/snaptrade');
       const data = await res.json();
-      if (data.url) {
+      if (res.ok && data.url) {
         window.location.href = data.url;
       } else {
-        alert("SnapTrade integration flow would start here.");
+        alert("API Error: " + (data.error || "Missing URL payload"));
       }
-    } catch {
-      alert("SnapTrade integration flow would start here.");
+    } catch (error: any) {
+      alert("Network Error: " + error.message);
     }
   }
 
