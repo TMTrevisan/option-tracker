@@ -89,7 +89,7 @@ export async function POST(req: Request) {
           }
 
           const isBuy = /BUY/i.test(trade.type);
-          const tt = isBuy ? 'Buy' : 'Sell'; 
+          const tt = isBuy ? 'BUY' : 'SELL'; 
 
           const qty = trade.units ? Math.abs(trade.units) : 0;
           const parsedPrice = trade.price || 0;
@@ -104,14 +104,14 @@ export async function POST(req: Request) {
                   strike_price = trade.option_symbol.strike_price || trade.option_symbol.strike;
                   expiration_date = trade.option_symbol.expiration_date || trade.option_symbol.expiration;
                   option_type = trade.option_symbol.option_type || trade.option_symbol.type;
-                  if (option_type && option_type.toLowerCase().startsWith('c')) option_type = 'Call';
-                  if (option_type && option_type.toLowerCase().startsWith('p')) option_type = 'Put';
+                  if (option_type && option_type.toLowerCase().startsWith('c')) option_type = 'CALL';
+                  if (option_type && option_type.toLowerCase().startsWith('p')) option_type = 'PUT';
               } else if (typeof trade.option_symbol === 'string') {
                   const occMatch = trade.option_symbol.match(/^[A-Z]+\s*(\d{6})([CP])(\d{8})$/i);
                   if (occMatch) {
                       const m2 = occMatch[1];
                       expiration_date = `20${m2.substring(0,2)}-${m2.substring(2,4)}-${m2.substring(4,6)}`;
-                      option_type = occMatch[2].toUpperCase() === 'C' ? 'Call' : 'Put';
+                      option_type = occMatch[2].toUpperCase() === 'C' ? 'CALL' : 'PUT';
                       strike_price = parseFloat(occMatch[3]) / 1000;
                   }
               }
