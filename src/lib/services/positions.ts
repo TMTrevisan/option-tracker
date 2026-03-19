@@ -81,11 +81,11 @@ export async function linkTradeToPosition(
       console.error('Error creating position:', error);
       return null;
     }
-    return newPos.id;
+    return (newPos as any).id;
 
   } else {
     // 3. UPDATE EXISTING POSITION
-    const pos = existingPos;
+    const pos = existingPos as any;
     const isLong = pos.side === 'LONG';
     
     // Determine if trade is Opening (adding size) or Closing (reducing size)
@@ -98,8 +98,8 @@ export async function linkTradeToPosition(
       isOpening = ['SELL', 'STO', 'SHORT'].includes(tType);
     }
 
-    let newOpenQty = pos.open_quantity || 0;
-    let newClosedQty = pos.closed_quantity || 0;
+    let newOpenQty = Number(pos.open_quantity || 0);
+    let newClosedQty = Number(pos.closed_quantity || 0);
     
     if (isOpening) {
        newOpenQty += trade.quantity;
@@ -128,9 +128,9 @@ export async function linkTradeToPosition(
     }
 
     // Net P/L calculation on close
-    let realizedPl = pos.realized_pl || 0;
+    let realizedPl = Number(pos.realized_pl || 0);
     if (newStatus === 'CLOSED' || newStatus === 'ASSIGNED') {
-       realizedPl = (pos.total_premium_kept + premiumAdjustment) - (pos.adjusted_cost_basis + costAdjustment) - (pos.total_fees + (trade.fees || 0));
+       realizedPl = (Number(pos.total_premium_kept || 0) + premiumAdjustment) - (Number(pos.adjusted_cost_basis || 0) + costAdjustment) - (Number(pos.total_fees || 0) + (trade.fees || 0));
     }
 
     const uniqueTags = Array.from(new Set([...(pos.tags || []), ...(trade.tags || [])]));
@@ -138,9 +138,9 @@ export async function linkTradeToPosition(
     const { error } = await supabase.from('positions')
       .update({
         status: newStatus,
-        total_fees: (pos.total_fees || 0) + (trade.fees || 0),
-        total_premium_kept: (pos.total_premium_kept || 0) + premiumAdjustment,
-        adjusted_cost_basis: (pos.adjusted_cost_basis || 0) + costAdjustment,
+        total_fees: Number(pos.total_fees || 0) + (trade.fees || 0),
+        total_premium_kept: Number(pos.total_premium_kept || 0) + premiumAdjustment,
+        adjusted_cost_basis: Number(pos.adjusted_cost_basis || 0) + costAdjustment,
         realized_pl: realizedPl,
         open_quantity: newOpenQty,
         closed_quantity: newClosedQty,
