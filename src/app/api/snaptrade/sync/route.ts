@@ -123,6 +123,7 @@ export async function POST(req: Request) {
       if (!error) insertedCount++;
       else if (error.code !== '23505') {
           console.error("Trade Insert Error:", error);
+          throw new Error(`Database Error (${error.code}): ${error.message}`);
       }
     }
 
