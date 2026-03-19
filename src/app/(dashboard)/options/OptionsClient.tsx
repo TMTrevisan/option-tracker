@@ -595,7 +595,20 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
           </div>
         ) : (
           sortedGroups.map(([symbol, symbolPositions]) => {
-            const ytdPL = symbolPositions.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
+            const ytdPL = symbolPositions.reduce((s, p) => {
+              let openPL = 0;
+              if (p.status === 'OPEN') {
+                const trades = p.trades || [];
+                const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
+                const strike = optionTrade?.strike_price;
+                const expiration = optionTrade?.expiration_date;
+                const type = (optionTrade?.option_type || 'CALL').toUpperCase();
+                const key = strike ? `${p.symbol}|${strike}|${expiration}|${type}` : p.symbol;
+                const lq = livePrices[key] || livePrices[p.symbol];
+                openPL = lq?.option_open_pl ?? lq?.open_pl ?? 0;
+              }
+              return s + (p.realized_pl ?? 0) + openPL;
+            }, 0);
             return (
               <TickerGroup
                 key={symbol}

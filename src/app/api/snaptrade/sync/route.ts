@@ -142,6 +142,9 @@ export async function POST(req: Request) {
                   option_type = trade.option_symbol.option_type || trade.option_symbol.type;
                   if (option_type && option_type.toLowerCase().startsWith('c')) option_type = 'CALL';
                   if (option_type && option_type.toLowerCase().startsWith('p')) option_type = 'PUT';
+                  if (expiration_date && typeof expiration_date === 'string') {
+                      expiration_date = expiration_date.split('T')[0];
+                  }
               } else if (typeof trade.option_symbol === 'string') {
                   const occMatch = trade.option_symbol.match(/^[A-Z]+\s*(\d{6})([CP])(\d{8})$/i);
                   if (occMatch) {
