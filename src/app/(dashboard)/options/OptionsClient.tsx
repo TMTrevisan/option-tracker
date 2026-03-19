@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
-import { ChevronRight, ChevronDown, Search, Eye, EyeOff, X, BookOpen, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2 } from 'lucide-react';
+import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 
 type Trade = {
   id: string;
@@ -237,6 +238,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
   const [sortKey, setSortKey] = useState<'symbol' | 'pl' | 'status' | 'date'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
 
   const toggleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -257,6 +259,14 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
         const hasAccount = (p.trades || []).some(t => t.account_id === accountFilter);
         if (!hasAccount) return false;
       }
+      // Date filter — match if any trade falls in range, or fall back to position created_at
+      if (dateRange.from || dateRange.to) {
+        const tradeDates = (p.trades || []).map(t => t.trade_date).filter(Boolean);
+        const hasDateMatch = tradeDates.length > 0
+          ? tradeDates.some(d => inDateRange(d, dateRange))
+          : inDateRange(p.created_at, dateRange);
+        if (!hasDateMatch) return false;
+      }
       return true;
     });
     arr = [...arr].sort((a, b) => {
@@ -270,7 +280,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
       return 0;
     });
     return arr;
-  }, [positions, search, statusFilter, strategyFilter, accountFilter, sortKey, sortDir]);
+  }, [positions, search, statusFilter, strategyFilter, accountFilter, dateRange, sortKey, sortDir]);
 
   const grouped = useMemo(() => {
     const map: Record<string, Position[]> = {};
@@ -339,6 +349,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
             ))}
           </select>
         )}
+        <DateRangeFilter onChange={setDateRange} />
 
         {/* Sort chips */}
         <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>

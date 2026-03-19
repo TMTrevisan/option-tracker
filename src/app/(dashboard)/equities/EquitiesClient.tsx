@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
 import { ChevronRight, ChevronDown, Search, X, Trash2 } from 'lucide-react';
+import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 
 type Trade = {
   id: string;
@@ -119,6 +120,7 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [accountFilter, setAccountFilter] = useState('ALL');
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
 
   const filtered = useMemo(() => positions.filter(p => {
     if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
@@ -127,8 +129,15 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
       const hasAccount = (p.trades || []).some((t: any) => t.account_id === accountFilter);
       if (!hasAccount) return false;
     }
+    if (dateRange.from || dateRange.to) {
+      const tradeDates = (p.trades || []).map((t: any) => t.trade_date).filter(Boolean);
+      const hasDateMatch = tradeDates.length > 0
+        ? tradeDates.some((d: string) => inDateRange(d, dateRange))
+        : inDateRange(p.created_at, dateRange);
+      if (!hasDateMatch) return false;
+    }
     return true;
-  }), [positions, search, statusFilter, accountFilter]);
+  }), [positions, search, statusFilter, accountFilter, dateRange]);
 
   const totalRealizedPL = positions.filter(p => p.status === 'CLOSED').reduce((s, p) => s + (p.realized_pl ?? 0), 0);
   const totalCostBasis = positions.filter(p => p.status === 'OPEN').reduce((s, p) => s + (p.adjusted_cost_basis ?? 0), 0);
@@ -174,6 +183,7 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
             ))}
           </select>
         )}
+        <DateRangeFilter onChange={setDateRange} />
       </div>
 
       {/* Table */}
