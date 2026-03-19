@@ -19,6 +19,9 @@ type LiveQuote = {
   iv?: number;
   underlying_price?: number;
   open_interest?: number;
+  bid?: number;
+  ask?: number;
+  volume?: number;
 };
 
 type Trade = {
