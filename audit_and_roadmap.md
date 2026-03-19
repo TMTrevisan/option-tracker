@@ -19,9 +19,8 @@
 | Position detail modal with trade timeline | Working, added "Log Trade / Roll" shortcut |
 | Mobile Responsive Layout | Hamburger menu, stackable grids, horizontal tables |
 | Dashboard charts & Analytics | Real P/L, Win Rate, Strategy Mix, Avg DTE |
+| Analytics Date Range Filter | Added time-boxed performance analysis |
 | Toast notification system | Global feedback for actions |
-| CSV export | Data portability enabled |
-| Black-Scholes Greeks | Δ, Γ, Θ, ν live in position modal |
 
 ---
 
@@ -46,11 +45,9 @@
 |---|------|-------|-----|
 | 3 | **Trade modal** | Need ability to edit trade notes post-sync. | Add a small "Edit" pencil icon next to notes in the timeline. |
 | 4 | **Brokerage page** | "Add Account" button redirect has no loading state. | Show "Loading..." spinner during SnapTrade OAuth redirect. |
-| 5 | **Analytics filtering** | Analytics page shows all-time data. | Add the `DateRangeFilter` to Analytics to allow filtering stats by year/month. |
 
 ---
 
 ## Recommended Next Steps
 1. Add Zod validation to API routes for robust error handling.
 2. Implement server-side pagination for Options/Equities to improve performance for users with 1000+ trades.
-3. Add a Date Range filter to the Analytics dashboard.
