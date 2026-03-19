@@ -17,10 +17,37 @@ export async function GET() {
   }
 
   try {
-    // For V1 MVP, we return a structural link. In production, we'd POST to /api/v1/snapTrade/login to generate a user-specific token
-    const mockLoginLink = `https://app.snaptrade.com/login?partner_client_id=${clientId}&user_id=${user.id}`;
-    return NextResponse.json({ url: mockLoginLink });
-  } catch {
-    return NextResponse.json({ error: 'Failed to generate SnapTrade link' }, { status: 500 });
+    // 1. Register User on SnapTrade
+    const registerResponse = await fetch(`https://api.snaptrade.com/api/v1/snapTrade/registerUser?clientId=${clientId}&consumerKey=${consumerKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ userId: user.id })
+    });
+    
+    const regData = await registerResponse.json();
+    const userSecret = regData?.userSecret;
+
+    if (!userSecret) {
+      return NextResponse.json({ error: 'SnapTrade registration failed. Check Consumer Key.' }, { status: 500 });
+    }
+
+    // 2. Generate secure Connection Portal URL
+    const loginResponse = await fetch(`https://api.snaptrade.com/api/v1/snapTrade/login?clientId=${clientId}&consumerKey=${consumerKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ userId: user.id, userSecret: userSecret })
+    });
+
+    if (!loginResponse.ok) throw new Error('Failed to generate connection URL');
+    
+    const loginData = await loginResponse.json();
+    if (loginData?.redirectURI) {
+       return NextResponse.json({ url: loginData.redirectURI });
+    }
+
+    throw new Error('No redirect URI provided by SnapTrade');
+    
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
