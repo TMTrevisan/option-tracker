@@ -74,6 +74,28 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
   const profitFactor = Math.abs(avgLoss) > 0 ? Math.abs(avgWin / avgLoss) : 0;
   const totalFees = positions.reduce((s, p) => s + (p.total_fees || 0), 0);
 
+  // --- Avg DTE ---
+  const avgDTE = useMemo(() => {
+    let totalDays = 0;
+    let optionCount = 0;
+    
+    positions.forEach(p => {
+      if (p.asset_type !== 'OPTION') return;
+      const trades = p.trades || [];
+      const openingTrade = trades.find(t => ['BUY', 'BTO', 'SELL', 'STO'].includes(t.trade_type));
+      
+      if (openingTrade && openingTrade.expiration_date && openingTrade.trade_date) {
+        const exp = new Date(openingTrade.expiration_date).getTime();
+        const open = new Date(openingTrade.trade_date).getTime();
+        const diffDays = Math.max(0, (exp - open) / (1000 * 60 * 60 * 24));
+        totalDays += diffDays;
+        optionCount++;
+      }
+    });
+    
+    return optionCount > 0 ? Math.round(totalDays / optionCount) : 0;
+  }, [positions]);
+
   // --- Win Rate by strategy ---
   const strategyStats = useMemo(() => {
     const map: Record<string, { total: number; wins: number; pl: number }> = {};
@@ -151,10 +173,11 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
         <StatCard label="TOTAL P/L" value={`${totalPL >= 0 ? '+' : ''}$${totalPL.toFixed(2)}`} sub={`${closed.length} closed positions`} icon={<TrendingUp size={20} />} color={totalPL >= 0 ? '#10b981' : '#f87171'} />
         <StatCard label="WIN RATE" value={`${winRate.toFixed(1)}%`} sub={`${wins.length}W · ${losses.length}L`} icon={<Target size={20} />} color="#60a5fa" />
         <StatCard label="PROFIT FACTOR" value={profitFactor > 0 ? profitFactor.toFixed(2) : '—'} sub={`Avg win $${avgWin.toFixed(0)} · Avg loss $${Math.abs(avgLoss).toFixed(0)}`} icon={<Award size={20} />} color="#a78bfa" />
+        <StatCard label="AVG DTE" value={`${avgDTE} days`} sub="At position open" icon={<Clock size={20} />} color="#38bdf8" />
         <StatCard label="TOTAL FEES" value={`$${totalFees.toFixed(2)}`} sub="All time" icon={<AlertTriangle size={20} />} color="#f59e0b" />
       </div>
 
