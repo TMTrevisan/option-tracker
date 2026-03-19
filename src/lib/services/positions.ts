@@ -46,7 +46,7 @@ export async function linkTradeToPosition(
   if (!existingPos) {
     // 2. CREATE NEW POSITION
     const isShortIntent = /Short|Covered|STO/i.test(strategy || '');
-    const side = isShortIntent ? 'SHORT' : (tType === 'BUY' || tType === 'BTO' || tType === 'LONG' ? 'LONG' : 'SHORT');
+    const side = isShortIntent ? 'SHORT' : (['BUY', 'BTO', 'LONG'].includes(tType) ? 'LONG' : 'SHORT');
     
     const premiumKept = (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') ? cashImpact : 0;
     const costBasis = (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') ? cashImpact : 0;
@@ -107,19 +107,29 @@ export async function linkTradeToPosition(
        newStatus = (tType === 'ASSIGNMENT' || tType === 'EXERCISE') ? 'ASSIGNED' : 'CLOSED';
     }
 
+    // Money math
     let premiumAdjustment = 0;
     let costAdjustment = 0;
     
-    if (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') {
-      if (!isLong) premiumAdjustment += cashImpact;
-      else costAdjustment -= cashImpact; 
+    // For ALL SELL/SHORT/STO trades
+    if (['SELL', 'SHORT', 'STO', 'STC'].includes(tType)) {
+      if (isLong) {
+        costAdjustment -= cashImpact; // Reducing cost basis (closing a long)
+      } else {
+        premiumAdjustment += cashImpact; // Adding to premium (opening/scaling a short)
+      }
     }
     
-    if (tType === 'BUY' || tType === 'BTO' || tType === 'BTC' || tType === 'COVER') {
-      if (isLong) costAdjustment += cashImpact; 
-      else premiumAdjustment -= cashImpact; 
+    // For ALL BUY/LONG/BTO/BTC trades
+    if (['BUY', 'LONG', 'BTO', 'BTC', 'COVER'].includes(tType)) {
+      if (isLong) {
+        costAdjustment += cashImpact; // Adding to cost basis (opening/scaling a long)
+      } else {
+        premiumAdjustment -= cashImpact; // Reducing premium (closing a short)
+      }
     }
 
+    // Net P/L calculation on close
     let realizedPl = Number(pos.realized_pl || 0);
     if (newStatus === 'CLOSED' || newStatus === 'ASSIGNED') {
        realizedPl = (Number(pos.total_premium_kept || 0) + premiumAdjustment) - (Number(pos.adjusted_cost_basis || 0) + costAdjustment) - (Number(pos.total_fees || 0) + (trade.fees || 0));
