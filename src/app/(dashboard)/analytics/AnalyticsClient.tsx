@@ -5,6 +5,7 @@ import {
   LineChart, Line, CartesianGrid, ReferenceLine, PieChart, Pie, Legend,
 } from 'recharts';
 import { TrendingUp, TrendingDown, Target, Clock, Award, AlertTriangle } from 'lucide-react';
+import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 
 type Position = {
   id: string; symbol: string; asset_type: string; strategy?: string;
@@ -60,9 +61,22 @@ function StatCard({ label, value, sub, icon, color }: { label: string; value: st
 
 export default function AnalyticsClient({ positions, trades }: { positions: Position[]; trades: Trade[] }) {
   const [rollingWindow, setRollingWindow] = useState<30 | 90 | 180 | 365>(90);
+  const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
 
-  const closed = useMemo(() => positions.filter(p => p.status === 'CLOSED' || p.status === 'ASSIGNED'), [positions]);
-  const open = useMemo(() => positions.filter(p => p.status === 'OPEN'), [positions]);
+  const filteredPositions = useMemo(() => {
+    if (!dateRange.from && !dateRange.to) return positions;
+    
+    return positions.filter(p => {
+      const pDate = p.updated_at || p.created_at;
+      if (inDateRange(pDate, dateRange)) return true;
+      
+      const pTrades = p.trades || [];
+      return pTrades.some(t => inDateRange(t.trade_date, dateRange));
+    });
+  }, [positions, dateRange]);
+
+  const closed = useMemo(() => filteredPositions.filter(p => p.status === 'CLOSED' || p.status === 'ASSIGNED'), [filteredPositions]);
+  const open = useMemo(() => filteredPositions.filter(p => p.status === 'OPEN'), [filteredPositions]);
 
   // --- Core stats ---
   const totalPL = closed.reduce((s, p) => s + (p.realized_pl || 0), 0);
@@ -72,29 +86,29 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
   const avgWin = wins.length > 0 ? wins.reduce((s, p) => s + (p.realized_pl || 0), 0) / wins.length : 0;
   const avgLoss = losses.length > 0 ? losses.reduce((s, p) => s + (p.realized_pl || 0), 0) / losses.length : 0;
   const profitFactor = Math.abs(avgLoss) > 0 ? Math.abs(avgWin / avgLoss) : 0;
-  const totalFees = positions.reduce((s, p) => s + (p.total_fees || 0), 0);
+  const totalFees = filteredPositions.reduce((s, p) => s + (p.total_fees || 0), 0);
 
   // --- Avg DTE ---
   const avgDTE = useMemo(() => {
     let totalDays = 0;
     let optionCount = 0;
     
-    positions.forEach(p => {
+    filteredPositions.forEach(p => {
       if (p.asset_type !== 'OPTION') return;
-      const trades = p.trades || [];
-      const openingTrade = trades.find(t => ['BUY', 'BTO', 'SELL', 'STO'].includes(t.trade_type));
+      const pTrades = p.trades || [];
+      const openingTrade = pTrades.find((t: any) => ['BUY', 'BTO', 'SELL', 'STO'].includes(t.trade_type));
       
       if (openingTrade && openingTrade.expiration_date && openingTrade.trade_date) {
         const exp = new Date(openingTrade.expiration_date).getTime();
-        const open = new Date(openingTrade.trade_date).getTime();
-        const diffDays = Math.max(0, (exp - open) / (1000 * 60 * 60 * 24));
+        const openD = new Date(openingTrade.trade_date).getTime();
+        const diffDays = Math.max(0, (exp - openD) / (1000 * 60 * 60 * 24));
         totalDays += diffDays;
         optionCount++;
       }
     });
     
     return optionCount > 0 ? Math.round(totalDays / optionCount) : 0;
-  }, [positions]);
+  }, [filteredPositions]);
 
   // --- Win Rate by strategy ---
   const strategyStats = useMemo(() => {
@@ -171,6 +185,11 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+      {/* Filter Row */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-0.5rem' }}>
+        <DateRangeFilter onChange={setDateRange} />
+      </div>
 
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
