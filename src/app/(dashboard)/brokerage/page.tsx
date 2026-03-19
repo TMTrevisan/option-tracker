@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server';
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { RefreshCw, Trash2, Calendar, DownloadCloud, Building } from 'lucide-react';
 import AddAccountButton from './AddAccountButton';
+import SyncButton from './SyncButton';
 
 export default async function BrokeragePage() {
   const supabase = await createClient();
@@ -95,10 +96,7 @@ export default async function BrokeragePage() {
                </div>
              </div>
 
-             <button className="btn btn-primary" style={{ width: '100%', padding: '0.75rem', justifyContent: 'center' }}>
-               <DownloadCloud size={18} />
-               Sync & Import
-             </button>
+             <SyncButton />
           </div>
         </div>
       </div>
