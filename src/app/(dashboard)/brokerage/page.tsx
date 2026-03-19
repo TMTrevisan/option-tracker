@@ -121,9 +121,7 @@ function AccountRow({ name, broker, account, balance }: { name: string, broker: 
       </div>
       <div className="flex items-center gap-4">
         <span className="badge badge-success">Connected</span>
-        <button style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.15s ease' }} 
-                onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
-                onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}>
+        <button style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
           <Trash2 size={18} />
         </button>
       </div>
