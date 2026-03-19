@@ -19,8 +19,7 @@ export async function linkTradeToPosition(
   const assetType = isOption ? 'OPTION' : 'EQUITY';
   
   // 1. Find an existing OPEN position
-  let query = supabase
-    .from('positions')
+  let query = (supabase.from('positions') as any)
     .select('*')
     .eq('user_id', trade.user_id)
     .eq('symbol', trade.symbol)
@@ -75,7 +74,7 @@ export async function linkTradeToPosition(
       insertData.option_type = trade.option_type;
     }
 
-    const { data: newPos, error } = await supabase.from('positions').insert(insertData).select().single();
+    const { data: newPos, error } = await (supabase.from('positions') as any).insert(insertData).select().single();
     if (error) {
       console.error('Error creating position:', error);
       return null;
@@ -128,7 +127,7 @@ export async function linkTradeToPosition(
 
     const uniqueTags = Array.from(new Set([...(pos.tags || []), ...(trade.tags || [])]));
 
-    const { error } = await supabase.from('positions')
+    const { error } = await (supabase.from('positions') as any)
       .update({
         status: newStatus,
         total_fees: Number(pos.total_fees || 0) + (trade.fees || 0),
