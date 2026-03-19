@@ -26,15 +26,23 @@ export async function POST(req: Request) {
 
     let allRawActivities: any[] = [];
 
-    // Loop through every connected brokerage account so we don't miss any external platforms
-    for (const account of accounts) {
-        // Hardcode fetching from 2024 to skip ancient data for the MVP
-        const activitiesResponse = await snaptrade.accountInformation.getAccountActivities({ 
-            userId: user.id, 
-            userSecret: secret, 
-            accountId: account.id,
-            startDate: "2024-01-01" 
-        });
+    // Issue all network requests to SnapTrade concurrently to bypass Vercel's 10.0s execution timeout
+    const fetchPromises = accounts.map(account => 
+      snaptrade.accountInformation.getAccountActivities({ 
+          userId: user.id, 
+          userSecret: secret, 
+          accountId: account.id,
+          startDate: "2024-01-01" 
+      }).catch(err => {
+          console.error(`Failed fetching for ${account.id}`, err);
+          return null;
+      })
+    );
+
+    const responses = await Promise.all(fetchPromises);
+
+    for (const activitiesResponse of responses) {
+        if (!activitiesResponse) continue;
 
         // Handle generic Object vs Array bypass
         let rawActivities = activitiesResponse.data as any;
@@ -50,7 +58,7 @@ export async function POST(req: Request) {
     }
 
     if (allRawActivities.length === 0) {
-        return NextResponse.json({ success: true, message: 'No historic activities found across any connected accounts.' });
+        return NextResponse.json({ success: true, message: '✅ No historic activities found across any connected accounts.' });
     }
 
     // Filter only BUY / SELL trade executions (ignore DIVIDEND, TRANSFER)
