@@ -8,10 +8,17 @@ export async function linkTradeToPosition(
   trade: TradeInsert,
   strategy?: string
 ): Promise<string | null> {
-  const isOption = ['CALL', 'PUT'].includes(trade.option_type || '');
+  const tType = (trade.trade_type || '').toUpperCase();
+  const oType = (trade.option_type || '').toUpperCase();
+
+  const isOption = ['CALL', 'PUT'].includes(oType);
+  const isEquity = Boolean(trade.symbol && !trade.strike_price && !trade.expiration_date && tType && ['BUY', 'SELL', 'SHORT', 'COVER'].includes(tType));
+  
+  if (!isOption && !isEquity) return null; // Abort cleanly if unmappable Transfer/Dividend
+
   const assetType = isOption ? 'OPTION' : 'EQUITY';
   
-  const isOpening = ['BTO', 'STO', 'BUY'].includes(trade.trade_type);
+  const isOpening = ['BTO', 'STO', 'BUY', 'SHORT'].includes(tType);
   
   // Find an existing OPEN position for this underlying symbol mapping
   const { data } = await supabase
@@ -31,10 +38,10 @@ export async function linkTradeToPosition(
   const multiplier = isOption ? 100 : 1;
   const cashImpact = trade.price * trade.quantity * multiplier;
 
-  if (isOpening && !positionId) {
-    // 1. Create a brand new position cluster
-    const premiumKept = (trade.trade_type === 'STO' || trade.trade_type === 'SELL') ? cashImpact : 0;
-    const costBasis = (trade.trade_type === 'BTO' || trade.trade_type === 'BUY') ? cashImpact : 0;
+  if (!positionId) {
+    // 1. Create a brand new position cluster (even if it's a SELL falling out of the synchronization boundary)
+    const premiumKept = (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') ? cashImpact : 0;
+    const costBasis = (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') ? cashImpact : 0;
 
     // @ts-ignore - Bypass Supabase generic inference failure mapping on Vercel
     const { data: newPos } = await supabase.from('positions').insert({
@@ -43,18 +50,26 @@ export async function linkTradeToPosition(
       symbol: trade.symbol,
       underlying_symbol: trade.symbol,
       strategy: strategy || (isOption ? 'Option Trade' : 'Long Stock'),
-      status: 'OPEN',
+      status: isOpening ? 'OPEN' : 'CLOSED', // Auto-close if we just instantiated an orphaned Historical SELL
       adjusted_cost_basis: costBasis,
       total_premium_kept: premiumKept,
       total_fees: trade.fees || 0,
       realized_pl: 0,
-      open_quantity: trade.quantity,
-      closed_quantity: 0,
+      open_quantity: isOpening ? trade.quantity : 0,
+      closed_quantity: isOpening ? 0 : trade.quantity,
       tags: trade.tags || []
     }).select().single();
 
     const pos = newPos as unknown as Position;
-    if (pos) return pos.id;
+    if (pos) {
+       // Auto-calculate PnL if it was closed
+       if (!isOpening) {
+           const realizedPl = (pos.total_premium_kept) - (pos.adjusted_cost_basis) - (pos.total_fees);
+           // @ts-ignore
+           await supabase.from('positions').update({ realized_pl: realizedPl }).eq('id', pos.id);
+       }
+       return pos.id;
+    }
 
   } else if (positionId) {
     // 2. Append to an existing position (Roll, Close, Scale)
@@ -71,17 +86,17 @@ export async function linkTradeToPosition(
     }
 
     if (newClosedQty >= newOpenQty) {
-       newStatus = trade.trade_type === 'ASSIGNMENT' ? 'ASSIGNED' : 'CLOSED';
+       newStatus = tType === 'ASSIGNMENT' ? 'ASSIGNED' : 'CLOSED';
     }
 
     let premiumAdjustment = 0;
     let costAdjustment = 0;
     
-    if (trade.trade_type === 'STO') premiumAdjustment += cashImpact;
-    if (trade.trade_type === 'BTC') premiumAdjustment -= cashImpact;
+    if (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') premiumAdjustment += cashImpact;
+    if (tType === 'BTC' || tType === 'COVER') premiumAdjustment -= cashImpact;
     
-    if (trade.trade_type === 'BTO' || trade.trade_type === 'BUY') costAdjustment += cashImpact;
-    if (trade.trade_type === 'STC' || trade.trade_type === 'SELL') costAdjustment -= cashImpact;
+    if (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') costAdjustment += cashImpact;
+    if (tType === 'STC' || tType === 'SELL' || tType === 'SHORT') costAdjustment -= cashImpact;
 
     // Pl Calculation on close
     let realizedPl = pos.realized_pl;
