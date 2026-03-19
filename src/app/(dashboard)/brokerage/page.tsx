@@ -1,20 +1,31 @@
-"use client";
+import { createClient } from '@/utils/supabase/server';
+import { Snaptrade } from 'snaptrade-typescript-sdk';
+import { RefreshCw, Trash2, Calendar, DownloadCloud, Building } from 'lucide-react';
+import AddAccountButton from './AddAccountButton';
 
-import { Link as LinkIcon, RefreshCw, Trash2, Calendar, DownloadCloud, Building } from 'lucide-react';
+export default async function BrokeragePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-export default function BrokeragePage() {
-  const handleAddAccount = async () => {
-    // Call the skeleton API route we created
+  let liveAccounts: any[] = [];
+
+  const clientId = process.env.SNAPTRADE_CLIENT_ID?.trim();
+  const consumerKey = process.env.SNAPTRADE_CONSUMER_KEY?.trim();
+
+  if (user && clientId && consumerKey) {
+    const snaptrade = new Snaptrade({ clientId, consumerKey });
     try {
-      const res = await fetch('/api/snaptrade');
-      const data = await res.json();
-      if (res.ok && data.url) {
-        window.location.href = data.url;
-      } else {
-        alert("API Error: " + (data.error || "Missing URL payload"));
+      // 1. Fetch idempotently generated User Secret
+      const reg = await snaptrade.authentication.registerSnapTradeUser({ userId: user.id });
+      const secret = reg.data?.userSecret;
+
+      if (secret) {
+        // 2. Fetch all Robinhood/Webull accounts tied to this user!
+        const response = await snaptrade.accountInformation.listUserAccounts({ userId: user.id, userSecret: secret });
+        liveAccounts = response.data || [];
       }
-    } catch (error: any) {
-      alert("Network Error: " + error.message);
+    } catch (e) {
+      console.log("Failed to SSR fetch SnapTrade accounts", e);
     }
   }
 
@@ -37,32 +48,32 @@ export default function BrokeragePage() {
         {/* Content */}
         <div style={{ padding: '1.5rem' }}>
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-base font-semibold">Connected Accounts (2)</h2>
+            <h2 className="text-base font-semibold">Connected Accounts ({liveAccounts.length})</h2>
             <div className="flex gap-2">
               <button className="btn btn-secondary">
                 <RefreshCw size={16} />
                 Refresh
               </button>
-              <button className="btn btn-primary" onClick={handleAddAccount}>
-                <LinkIcon size={16} />
-                Add Account
-              </button>
+              <AddAccountButton />
             </div>
           </div>
 
           <div className="flex flex-col gap-3 mb-8">
-            <AccountRow 
-              name="Individual Taxable" 
-              broker="TD Ameritrade" 
-              account="****4892" 
-              balance="$142,830.55" 
-            />
-            <AccountRow 
-              name="Margin Account" 
-              broker="Interactive Brokers" 
-              account="****7731" 
-              balance="$218,640.20" 
-            />
+            {liveAccounts.length === 0 ? (
+               <div className="text-muted text-sm" style={{ padding: '1rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
+                 No brokerage accounts connected yet.
+               </div>
+            ) : (
+               liveAccounts.map((acc: any) => (
+                 <AccountRow 
+                   key={acc.id}
+                   name={acc.name || "Brokerage Account"} 
+                   broker={acc.institution_name || "Robinhood"} 
+                   account={acc.number ? `****${acc.number.slice(-4)}` : "Connected"} 
+                   balance={acc.balance?.cash ? `$${acc.balance.cash.toFixed(2)}` : "Live"} 
+                 />
+               ))
+            )}
           </div>
 
           {/* Sync Section */}
