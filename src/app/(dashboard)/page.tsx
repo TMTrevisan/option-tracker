@@ -1,15 +1,46 @@
 import { TrendingUp, Target, Calendar, Bookmark, Plus } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
-// Chart component separated to keep it as Client Component
 import DashboardChart from '@/components/DashboardChart';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const [{ data: positions }, { data: trades }] = await Promise.all([
+    supabase.from('positions').select('*').eq('user_id', user?.id),
+    supabase.from('trades').select('*').eq('user_id', user?.id),
+  ]);
+
+  const allPositions = positions || [];
+  const allTrades = trades || [];
+
+  // Core metrics
+  const closedPositions = allPositions.filter(p => p.status === 'CLOSED' || p.status === 'ASSIGNED');
+  const ytdPL = closedPositions.reduce((sum, p) => sum + (p.realized_pl || 0), 0);
+  const winCount = closedPositions.filter(p => (p.realized_pl || 0) > 0).length;
+  const winRate = closedPositions.length > 0 ? (winCount / closedPositions.length) * 100 : 0;
   
-  // Fetch real trades from DB
-  const { data: trades } = await supabase.from('trades').select('*');
-  const openTradesCount = trades?.length || 0;
+  // This month P/L
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const thisMonthPL = allTrades
+    .filter(t => t.trade_date && t.trade_date >= startOfMonth)
+    .reduce((sum, t) => {
+      const isSell = (t.trade_type || '').toUpperCase() === 'SELL' || (t.trade_type || '').toUpperCase() === 'STC' || (t.trade_type || '').toUpperCase() === 'BTC';
+      return sum + (isSell ? (t.price * t.quantity) : 0);
+    }, 0);
+
+  const openCount = allPositions.filter(p => p.status === 'OPEN').length;
+  const optionPositions = allPositions.filter(p => p.asset_type === 'OPTION');
+  const equityPositions = allPositions.filter(p => p.asset_type === 'EQUITY');
+
+  // Strategy breakdown counts
+  const strategyMap: Record<string, number> = {};
+  allPositions.forEach(p => {
+    const s = p.strategy || (p.asset_type === 'OPTION' ? 'Option Trade' : 'Long Stock');
+    strategyMap[s] = (strategyMap[s] || 0) + 1;
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -26,34 +57,34 @@ export default async function DashboardPage() {
 
       {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
-        <StatCard 
-          title="YTD P/L" 
-          value="+$0.00" 
-          subtitle={openTradesCount > 0 ? "Tracking" : "No closed trades"} 
-          icon={<TrendingUp size={20} color="#10b981" />} 
+        <StatCard
+          title="YTD P/L"
+          value={`${ytdPL >= 0 ? '+' : ''}$${ytdPL.toFixed(2)}`}
+          subtitle={closedPositions.length > 0 ? `${closedPositions.length} closed positions` : "No closed positions yet"}
+          icon={<TrendingUp size={20} color="#10b981" />}
           accent="#10b981"
-          success={false}
+          success={ytdPL > 0}
         />
-        <StatCard 
-          title="YTD Win Rate" 
-          value="0.0%" 
-          subtitle="0 closed trades" 
-          icon={<Target size={20} color="#60a5fa" />} 
+        <StatCard
+          title="YTD Win Rate"
+          value={`${winRate.toFixed(1)}%`}
+          subtitle={`${winCount} wins of ${closedPositions.length} closed`}
+          icon={<Target size={20} color="#60a5fa" />}
           accent="#60a5fa"
         />
-        <StatCard 
-          title="This Month" 
-          value="+$0.00" 
-          subtitle="-- " 
-          icon={<Calendar size={20} color="#a78bfa" />} 
+        <StatCard
+          title="This Month"
+          value={`${thisMonthPL >= 0 ? '+' : ''}$${thisMonthPL.toFixed(2)}`}
+          subtitle={`Options: ${optionPositions.length} · Equities: ${equityPositions.length}`}
+          icon={<Calendar size={20} color="#a78bfa" />}
           accent="#a78bfa"
-          success={false}
+          success={thisMonthPL > 0}
         />
-        <StatCard 
-          title="Total Trades Logged" 
-          value={openTradesCount.toString()} 
-          subtitle="Historical & Active" 
-          icon={<Bookmark size={20} color="#fb923c" />} 
+        <StatCard
+          title="Open Positions"
+          value={openCount.toString()}
+          subtitle={`${allTrades.length} total trades synced`}
+          icon={<Bookmark size={20} color="#fb923c" />}
           accent="#fb923c"
         />
       </div>
@@ -68,16 +99,23 @@ export default async function DashboardPage() {
             <div style={{ width: 14, height: 14, border: '2px solid var(--text-secondary)', borderRadius: '50%' }} />
             YTD Strategy Breakdown
           </div>
-          
-          {openTradesCount === 0 ? (
+
+          {allPositions.length === 0 ? (
             <div style={{ backgroundColor: 'var(--bg-input)', borderRadius: 'var(--radius-md)', padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <p className="text-sm">No trades logged yet.</p>
+              <p className="text-sm">No positions yet.</p>
+              <p className="text-xs" style={{ marginTop: '0.5rem' }}>Run Sync &amp; Import from the Brokerage page.</p>
             </div>
           ) : (
-            <div style={{ backgroundColor: 'var(--bg-input)', borderRadius: 'var(--radius-md)', padding: '1rem' }}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-semibold text-sm">Active Positions</span>
-                <span className="badge badge-dark" style={{ fontSize: '0.7rem' }}>{openTradesCount} items</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {Object.entries(strategyMap).slice(0, 8).map(([strat, count]) => (
+                <div key={strat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-input)', borderRadius: '6px', padding: '0.5rem 0.875rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{strat}</span>
+                  <span className="badge badge-dark" style={{ fontSize: '0.7rem' }}>{count}</span>
+                </div>
+              ))}
+              <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
+                <Link href="/options" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none' }}>View Options →</Link>
+                <Link href="/equities" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none' }}>View Equities →</Link>
               </div>
             </div>
           )}
@@ -94,11 +132,8 @@ function StatCard({ title, value, subtitle, icon, accent, success }: { title: st
       <div style={{ zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div className="text-sm font-medium text-muted mb-2">{title}</div>
-          <div className="text-3xl font-bold mb-2">{value}</div>
-          <div className="text-xs" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: success ? 'var(--accent-success)' : 'var(--text-muted)' }}>
-            {success && <TrendingUp size={14} />}
-            {subtitle}
-          </div>
+          <div className="text-3xl font-bold mb-2" style={{ color: success ? 'var(--accent-success)' : undefined }}>{value}</div>
+          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{subtitle}</div>
         </div>
         <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.2)' }}>
           {icon}
