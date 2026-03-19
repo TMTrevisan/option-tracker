@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { LayoutDashboard, Plus, TrendingUp, BarChart2, Briefcase, MessageSquare, Settings } from 'lucide-react';
+import { LayoutDashboard, Plus, TrendingUp, BarChart2, Briefcase, MessageSquare, Settings, LineChart } from 'lucide-react';
 import { createClient } from '@/utils/supabase/server';
 import SidebarLink from './SidebarLink';
 
@@ -20,6 +20,7 @@ export default async function Sidebar() {
         <SidebarLink href="/log-trade" icon={<Plus size={20} />} label="Log Trade" />
         <SidebarLink href="/options" icon={<TrendingUp size={20} />} label="Options" />
         <SidebarLink href="/equities" icon={<BarChart2 size={20} />} label="Equities" />
+        <SidebarLink href="/analytics" icon={<LineChart size={20} />} label="Analytics" />
         <SidebarLink href="/brokerage" icon={<Briefcase size={20} />} label="Brokerage" />
       </nav>
 

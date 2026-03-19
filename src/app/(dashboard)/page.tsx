@@ -42,6 +42,27 @@ export default async function DashboardPage() {
     strategyMap[s] = (strategyMap[s] || 0) + 1;
   });
 
+  // Monthly P/L series for chart (closed positions grouped by close month)
+  const monthlyPLMap: Record<string, number> = {};
+  closedPositions.forEach(p => {
+    // Use updated_at or created_at — pick the later one as "close date" approximation
+    const d = new Date(p.updated_at || p.created_at || Date.now());
+    const key = d.toLocaleString('en-US', { month: 'short', year: '2-digit' });
+    monthlyPLMap[key] = (monthlyPLMap[key] || 0) + (p.realized_pl || 0);
+  });
+  // Sort by date and compute cumulative
+  const currentYear = now.getFullYear();
+  const months = Array.from({ length: now.getMonth() + 1 }, (_, i) => {
+    const d = new Date(currentYear, i, 1);
+    return d.toLocaleString('en-US', { month: 'short', year: '2-digit' });
+  });
+  let running = 0;
+  const chartData = months.map(m => {
+    const pl = monthlyPLMap[m] || 0;
+    running += pl;
+    return { month: m, pl: Math.round(pl * 100) / 100, cumulative: Math.round(running * 100) / 100 };
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <div className="flex justify-between items-center">
@@ -91,7 +112,7 @@ export default async function DashboardPage() {
 
       {/* Main content grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
-        <DashboardChart />
+        <DashboardChart data={chartData} />
 
         {/* Strategy Breakdown */}
         <div className="card" style={{ padding: '1.5rem' }}>
