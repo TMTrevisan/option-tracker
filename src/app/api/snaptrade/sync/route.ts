@@ -4,16 +4,18 @@ import { NextResponse } from 'next/server';
 import { linkTradeToPosition } from '@/lib/services/positions';
 
 // Auto-classify strategy from trade type + option type
-function classifyStrategy(tradeType: string, optionType: string | null, hasPair: boolean): string {
+// In a sync, we don't know if it's opening or closing yet.
+// We'll use a more descriptive guess that the Roll Engine can use.
+function classifyStrategy(tradeType: string, optionType: string | null): string {
   const tt = tradeType.toUpperCase();
   const ot = (optionType || '').toUpperCase();
-  if (ot === 'CALL' && tt === 'BUY') return 'Long Call';
-  if (ot === 'CALL' && tt === 'SELL') return 'Covered Call';
-  if (ot === 'PUT' && tt === 'SELL') return 'Short Put';
-  if (ot === 'PUT' && tt === 'BUY') return 'Long Put';
-  if (tt === 'BUY') return 'Long Stock';
-  if (tt === 'SELL') return 'Short Stock';
-  return 'Option Trade';
+  if (ot === 'CALL') {
+    return tt === 'SELL' ? 'Short Call' : 'Long Call';
+  }
+  if (ot === 'PUT') {
+    return tt === 'SELL' ? 'Short Put' : 'Long Put';
+  }
+  return tt === 'BUY' ? 'Long Stock' : 'Short Stock';
 }
 
 export async function POST(req: Request) {
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
 
         pushLog("> Authenticating with SnapTrade Hub...");
         const accountsRes = await snaptrade.accountInformation.listUserAccounts({ userId: user.id, userSecret: secret });
-        const accounts = accountsRes.data || [];
+        const accounts = (accountsRes.data || []) as any[];
         
         if (accounts.length === 0) throw new Error('No brokerage accounts bound to profile.');
 
@@ -102,9 +104,14 @@ export async function POST(req: Request) {
             return;
         }
 
+        // IMPORTANT: Filter trades and sort by date ASCENDING so we process them in chronological order
         const validTrades = allRawActivities
           .filter((a: any) => a.type && /BUY|SELL/i.test(a.type))
-          .sort((a, b) => new Date(a.trade_date || a.settlement_date || 0).getTime() - new Date(b.trade_date || b.settlement_date || 0).getTime());
+          .sort((a, b) => {
+            const dateA = new Date(a.trade_date || a.settlement_date || 0).getTime();
+            const dateB = new Date(b.trade_date || b.settlement_date || 0).getTime();
+            return dateA - dateB;
+          });
         
         pushLog(`> Siphoned ${validTrades.length} executable trade records (Bypassed ${allRawActivities.length - validTrades.length} Non-Trade Transfers/Dividends).`);
         pushLog(`> Routing executions into Roll Engine...`);
@@ -164,7 +171,7 @@ export async function POST(req: Request) {
           if (expiration_date) (tradeInsert as any).expiration_date = expiration_date;
           if (option_type) (tradeInsert as any).option_type = option_type;
 
-          const strategy = classifyStrategy(tt, option_type, false);
+          const strategy = classifyStrategy(tt, option_type);
           const positionId = await linkTradeToPosition(supabase, tradeInsert as any, strategy);
           if (positionId) {
               (tradeInsert as any).position_id = positionId;

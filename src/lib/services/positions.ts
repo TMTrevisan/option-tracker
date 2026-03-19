@@ -46,8 +46,9 @@ export async function linkTradeToPosition(
 
   if (!existingPos) {
     // 2. CREATE NEW POSITION
-    // Side is determined by the first trade
-    const side = (tType === 'BUY' || tType === 'BTO' || tType === 'LONG') ? 'LONG' : 'SHORT';
+    // Side is determined by the first trade and the inferred strategy
+    const isShortIntent = /Short|Covered|STO/i.test(strategy || '');
+    const side = isShortIntent ? 'SHORT' : (tType === 'BUY' || tType === 'BTO' || tType === 'LONG' ? 'LONG' : 'SHORT');
     
     const premiumKept = (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') ? cashImpact : 0;
     const costBasis = (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') ? cashImpact : 0;
@@ -90,8 +91,10 @@ export async function linkTradeToPosition(
     // Determine if trade is Opening (adding size) or Closing (reducing size)
     let isOpening = false;
     if (isLong) {
+      // Long position: BUY adds, SELL closes
       isOpening = ['BUY', 'BTO', 'LONG'].includes(tType);
     } else {
+      // Short position: SELL adds, BUY closes
       isOpening = ['SELL', 'STO', 'SHORT'].includes(tType);
     }
 
@@ -104,6 +107,7 @@ export async function linkTradeToPosition(
        newClosedQty += trade.quantity;
     }
 
+    // A position closes when we've traded as many units in the closing direction as in the opening direction
     let newStatus = 'OPEN';
     if (newClosedQty >= newOpenQty) {
        newStatus = (tType === 'ASSIGNMENT' || tType === 'EXERCISE') ? 'ASSIGNED' : 'CLOSED';
@@ -113,15 +117,14 @@ export async function linkTradeToPosition(
     let premiumAdjustment = 0;
     let costAdjustment = 0;
     
-    if (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') premiumAdjustment += cashImpact;
-    if (tType === 'BTC' || tType === 'COVER') premiumAdjustment -= cashImpact;
-    if (tType === 'BTO' || tType === 'BUY') {
-      if (isLong) costAdjustment += cashImpact; 
-      else premiumAdjustment -= cashImpact;
+    if (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') {
+      if (!isLong) premiumAdjustment += cashImpact; // Adding to a short
+      else costAdjustment -= cashImpact; // Reducing a long (selling)
     }
-    if (tType === 'STC') {
-       if (isLong) costAdjustment -= cashImpact;
-       else premiumAdjustment += cashImpact;
+    
+    if (tType === 'BUY' || tType === 'BTO' || tType === 'BTC' || tType === 'COVER') {
+      if (isLong) costAdjustment += cashImpact; // Adding to a long
+      else premiumAdjustment -= cashImpact; // Buying back a short
     }
 
     // Net P/L calculation on close
