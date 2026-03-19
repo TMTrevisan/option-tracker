@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { NextResponse } from 'next/server';
+import { linkTradeToPosition } from '@/lib/services/positions';
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -115,6 +116,12 @@ export async function POST(req: Request) {
       if (strike_price) (tradeInsert as any).strike_price = strike_price;
       if (expiration_date) (tradeInsert as any).expiration_date = expiration_date;
       if (option_type) (tradeInsert as any).option_type = option_type;
+
+      // Ensure Trade is algorithmically bound to a parent Equity or Option Position
+      const positionId = await linkTradeToPosition(supabase, tradeInsert as any);
+      if (positionId) {
+          (tradeInsert as any).position_id = positionId;
+      }
 
       // Insert logic with deduplication
       const { error } = await supabase.from('trades').insert(tradeInsert as any);
