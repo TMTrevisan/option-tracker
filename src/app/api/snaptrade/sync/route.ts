@@ -31,12 +31,21 @@ export async function POST(req: Request) {
         startDate: "2024-01-01" 
     });
 
-    // Only dump the 5 most recent activities to avoid blasting the screen
-    const parsedData = activities.data.slice(0, 5);
+    // SnapTrade SDK might return an object instead of an Array for activities
+    const rawData = activities.data as any;
+    let parsedData;
+    
+    if (Array.isArray(rawData)) {
+        parsedData = rawData.slice(0, 5);
+    } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.activities)) {
+        parsedData = { ...rawData, activities: rawData.activities.slice(0, 5) };
+    } else {
+        parsedData = rawData; // Just safely dump whatever the hell this object is
+    }
     
     return NextResponse.json({ 
         success: true, 
-        message: `Successfully pulled ${activities.data.length} historic trades.\n\nPLEASE COPY THIS GREEN TEXT AND SEND TO YOUR AI DEVELOPER SO HE CAN BUILD THE PARSER:\n\n${JSON.stringify(parsedData, null, 2)}` 
+        message: `Successfully pulled Historic Data.\n\nPLEASE COPY THIS GREEN TEXT AND SEND TO YOUR AI DEVELOPER:\n\n${JSON.stringify(parsedData, null, 2)}` 
     });
 
   } catch (error: any) {
