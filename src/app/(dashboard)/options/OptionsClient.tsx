@@ -4,6 +4,8 @@ import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap } from 'luc
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 import { useToast } from '@/components/ToastProvider';
 import { useRouter } from 'next/navigation';
+import { calculateGreeks, getDTE } from '@/lib/utils/greeks';
+import CSVExportButton from '@/components/CSVExportButton';
 
 type LiveQuote = {
   price?: number;
@@ -92,6 +94,21 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
   const mark = live?.option_mark ?? live?.price;
   const iv = live?.iv;
   const underlying = live?.underlying_price;
+  const underPrice = underlying ?? 0;
+  const ivValue = iv ?? 0;
+  
+  // Find strike and expiration from trades to calculate Greeks
+  const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
+  const strike = optionTrade?.strike_price ?? 0;
+  const expiration = optionTrade?.expiration_date ?? '';
+  const optionType = (optionTrade?.option_type || 'CALL').toUpperCase() as 'CALL' | 'PUT';
+  
+  const greeks = useMemo(() => {
+    if (!underPrice || !strike || !expiration || !ivValue) return null;
+    const dte = getDTE(expiration);
+    return calculateGreeks(underPrice, strike, dte / 365, ivValue, 0.05, optionType);
+  }, [underPrice, strike, expiration, ivValue, optionType]);
+
   const { toast } = useToast();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -165,11 +182,21 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
 
         {/* Live Market Data Row — only shown if data available */}
         {(mark != null || iv != null || underlying != null) && (
-          <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1.5rem', backgroundColor: 'rgba(16,185,129,0.05)', borderBottom: '1px solid rgba(16,185,129,0.1)' }}>
-            <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.08em', alignSelf: 'center' }}>LIVE</span>
-            {mark != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Mark <strong style={{ color: '#fff' }}>${mark.toFixed(2)}</strong></span>}
-            {underlying != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Underlying <strong style={{ color: '#fff' }}>${underlying.toFixed(2)}</strong></span>}
-            {iv != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>IV <strong style={{ color: '#f59e0b' }}>{(iv * 100).toFixed(1)}%</strong></span>}
+          <div style={{ padding: '0.75rem 1.5rem', backgroundColor: 'rgba(16,185,129,0.05)', borderBottom: '1px solid rgba(16,185,129,0.1)' }}>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.08em' }}>LIVE</span>
+              {mark != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Mark <strong style={{ color: '#fff' }}>${mark.toFixed(2)}</strong></span>}
+              {underPrice > 0 && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Underlying <strong style={{ color: '#fff' }}>${underPrice.toFixed(2)}</strong></span>}
+              {ivValue > 0 && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>IV <strong style={{ color: '#f59e0b' }}>{(ivValue * 100).toFixed(1)}%</strong></span>}
+            </div>
+            {greeks && (
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap', padding: '0.4rem 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)' }}>Δ <strong style={{ color: '#fff' }}>{greeks.delta.toFixed(3)}</strong></span>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)' }}>Γ <strong style={{ color: '#fff' }}>{greeks.gamma.toFixed(4)}</strong></span>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)' }}>Θ <strong style={{ color: '#f87171' }}>{greeks.theta.toFixed(3)}</strong></span>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)' }}>ν <strong style={{ color: '#60a5fa' }}>{greeks.vega.toFixed(3)}</strong></span>
+              </div>
+            )}
           </div>
         )}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -452,6 +479,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
           </select>
         )}
         <DateRangeFilter onChange={setDateRange} />
+        <CSVExportButton data={filtered} filename={`options_positions_${new Date().toISOString().split('T')[0]}`} />
 
         {/* Sort chips */}
         <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>

@@ -4,6 +4,7 @@ import { ChevronRight, ChevronDown, Search, X, Trash2 } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 import { useToast } from '@/components/ToastProvider';
 import { useRouter } from 'next/navigation';
+import CSVExportButton from '@/components/CSVExportButton';
 
 type Trade = {
   id: string;
@@ -216,6 +217,7 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
           </select>
         )}
         <DateRangeFilter onChange={setDateRange} />
+        <CSVExportButton data={filtered} filename={`equities_positions_${new Date().toISOString().split('T')[0]}`} />
       </div>
 
       {/* Table */}
