@@ -18,10 +18,7 @@ export async function linkTradeToPosition(
 
   const assetType = isOption ? 'OPTION' : 'EQUITY';
   
-  const isOpening = ['BTO', 'STO', 'BUY', 'SHORT'].includes(tType);
-  
-  // Find an existing OPEN position for this underlying symbol mapping
-  // For options, we MUST match on strike, expiration, and type
+  // Find an existing OPEN position
   let query = supabase
     .from('positions')
     .select('*')
@@ -41,14 +38,19 @@ export async function linkTradeToPosition(
     .limit(1);
 
   const openPositions = data as unknown as Position[];
-  const positionId = openPositions?.[0]?.id;
+  const existingPos = openPositions?.[0];
+  const positionId = existingPos?.id;
 
   // Option multiplier (100 shares per contract)
   const multiplier = isOption ? 100 : 1;
   const cashImpact = trade.price * trade.quantity * multiplier;
 
   if (!positionId) {
-    // 1. Create a brand new position cluster
+    // 1. Create a brand new position
+    // Side is determined by the VERY FIRST trade
+    const side = (tType === 'BUY' || tType === 'BTO' || tType === 'LONG') ? 'LONG' : 'SHORT';
+    const isOpening = true; 
+
     const premiumKept = (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') ? cashImpact : 0;
     const costBasis = (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') ? cashImpact : 0;
 
@@ -57,16 +59,82 @@ export async function linkTradeToPosition(
       asset_type: assetType,
       symbol: trade.symbol,
       underlying_symbol: trade.symbol,
-      strategy: strategy || (isOption ? 'Option Trade' : 'Long Stock'),
-      status: isOpening ? 'OPEN' : 'CLOSED',
+      strategy: strategy || (isOption ? (side === 'LONG' ? 'Long Option' : 'Short Option') : (side === 'LONG' ? 'Long Stock' : 'Short Stock')),
+      status: 'OPEN',
+      side: side,
       adjusted_cost_basis: costBasis,
       total_premium_kept: premiumKept,
       total_fees: trade.fees || 0,
       realized_pl: 0,
-      open_quantity: isOpening ? trade.quantity : 0,
-      closed_quantity: isOpening ? 0 : trade.quantity,
+      open_quantity: trade.quantity,
+      closed_quantity: 0,
       tags: trade.tags || []
     };
+
+    if (isOption) {
+      if (trade.strike_price) insertData.strike_price = trade.strike_price;
+      if (trade.expiration_date) insertData.expiration_date = trade.expiration_date;
+      if (trade.option_type) insertData.option_type = trade.option_type;
+    }
+
+    // @ts-ignore
+    const { data: newPos } = await supabase.from('positions').insert(insertData).select().single();
+    return (newPos as any)?.id || null;
+
+  } else {
+    // 2. Append to existing position
+    const pos = existingPos as any;
+    const isLong = pos.side === 'LONG';
+    
+    // Determine if this trade is Opening or Closing based on the Side
+    let isOpening = false;
+    if (isLong) {
+      // For a LONG position, BUY adds, SELL closes
+      isOpening = (tType === 'BUY' || tType === 'BTO' || tType === 'LONG');
+    } else {
+      // For a SHORT position, SELL adds, BUY closes
+      isOpening = (tType === 'SELL' || tType === 'STO' || tType === 'SHORT');
+    }
+
+    let newOpenQty = pos.open_quantity;
+    let newClosedQty = pos.closed_quantity;
+    
+    if (isOpening) {
+       newOpenQty += trade.quantity;
+    } else {
+       newClosedQty += trade.quantity;
+    }
+
+    let newStatus = 'OPEN';
+    if (newClosedQty >= newOpenQty) {
+       newStatus = (tType === 'ASSIGNMENT' || tType === 'EXERCISE') ? 'ASSIGNED' : 'CLOSED';
+    }
+
+    let premiumAdjustment = 0;
+    let costAdjustment = 0;
+    
+    if (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') premiumAdjustment += cashImpact;
+    if (tType === 'BTC' || tType === 'COVER' || tType === 'BUY') {
+      if (!isLong) premiumAdjustment -= cashImpact; // Buying back a short
+      else costAdjustment += cashImpact; // Adding to a long
+    }
+    
+    if (tType === 'BTO' || tType === 'BUY') {
+      if (isLong) costAdjustment += cashImpact; 
+      else premiumAdjustment -= cashImpact;
+    }
+    if (tType === 'STC' || tType === 'SELL' || tType === 'SHORT') {
+       if (isLong) costAdjustment -= cashImpact;
+       else premiumAdjustment += cashImpact;
+    }
+
+    // Simple P/L on close
+    let realizedPl = pos.realized_pl || 0;
+    if (newStatus === 'CLOSED' || newStatus === 'ASSIGNED') {
+       realizedPl = (pos.total_premium_kept + premiumAdjustment) - (pos.adjusted_cost_basis + costAdjustment) - (pos.total_fees + (trade.fees || 0));
+    }
+
+
 
     if (isOption) {
       if (trade.strike_price) insertData.strike_price = trade.strike_price;

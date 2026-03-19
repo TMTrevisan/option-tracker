@@ -102,7 +102,10 @@ export async function POST(req: Request) {
             return;
         }
 
-        const validTrades = allRawActivities.filter((a: any) => a.type && /BUY|SELL/i.test(a.type));
+        const validTrades = allRawActivities
+          .filter((a: any) => a.type && /BUY|SELL/i.test(a.type))
+          .sort((a, b) => new Date(a.trade_date || a.settlement_date || 0).getTime() - new Date(b.trade_date || b.settlement_date || 0).getTime());
+        
         pushLog(`> Siphoned ${validTrades.length} executable trade records (Bypassed ${allRawActivities.length - validTrades.length} Non-Trade Transfers/Dividends).`);
         pushLog(`> Routing executions into Roll Engine...`);
 
