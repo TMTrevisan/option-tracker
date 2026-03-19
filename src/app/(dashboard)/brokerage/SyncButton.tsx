@@ -11,9 +11,25 @@ export default function SyncButton() {
     setDebugJson("");
     try {
       const res = await fetch('/api/snaptrade/sync', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setDebugJson(data.message);
+      
+      if (!res.ok && res.status >= 400 && !res.body) {
+         throw new Error("HTTP " + res.status);
+      }
+
+      if (res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let loop = true;
+        while (loop) {
+          const { value, done } = await reader.read();
+          if (done) {
+            loop = false;
+            break;
+          }
+          const text = decoder.decode(value);
+          setDebugJson(prev => prev + text);
+        }
+      }
     } catch (e: any) {
       alert("Error: " + e.message);
     } finally {
