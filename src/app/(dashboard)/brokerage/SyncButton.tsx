@@ -53,6 +53,10 @@ export default function SyncButton() {
   };
 
   const hasError = logLines.some(l => l.startsWith('❌'));
+  
+  // Very rough estimate of progress based on log lines
+  const estimatedTotalLines = 50; 
+  const progressPercent = status === 'success' ? 100 : status === 'running' ? Math.min(Math.max((logLines.length / estimatedTotalLines) * 100, 5), 95) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -73,17 +77,20 @@ export default function SyncButton() {
           className="btn btn-primary"
           onClick={handleSync}
           disabled={loading}
-          style={{ alignSelf: 'flex-end', padding: '0.55rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '140px', justifyContent: 'center' }}
+          style={{ alignSelf: 'flex-end', padding: '0.55rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '140px', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}
         >
+          {loading && (
+             <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${progressPercent}%`, backgroundColor: 'rgba(255,255,255,0.2)', transition: 'width 0.3s ease' }} />
+          )}
           {loading ? (
             <>
-              <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-              Syncing...
+              <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', zIndex: 1 }} />
+              <span style={{ zIndex: 1 }}>Syncing...</span>
             </>
           ) : (
             <>
               <DownloadCloud size={16} />
-              Sync &amp; Import
+              <span>Sync &amp; Import</span>
             </>
           )}
         </button>

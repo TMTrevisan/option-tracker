@@ -279,7 +279,23 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No equity positions match your filters.</td></tr>
+                <tr>
+                  <td colSpan={6} style={{ padding: '4rem 2rem' }}>
+                    <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.3)' }}><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: '0.25rem' }}>
+                          {positions.length === 0 ? 'No equities tracked yet' : 'No positions match your filters'}
+                        </div>
+                        <div style={{ fontSize: '0.85rem' }}>
+                          {positions.length === 0 ? 'Log a trade manually or sync your brokerage.' : 'Try adjusting your search or date range.'}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
               ) : filtered.map(pos => (
                 <tr key={pos.id} onClick={() => setSelectedPosition(pos)} style={{ borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                   <td style={{ padding: '1rem 1.5rem', fontWeight: 700 }}>{pos.symbol}</td>

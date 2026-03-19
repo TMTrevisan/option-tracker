@@ -590,8 +590,25 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
         </div>
 
         {sortedGroups.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '0.875rem' }}>
-            {positions.length === 0 ? 'No option positions found.' : 'No positions match your filters.'}
+          <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'rgba(255,255,255,0.4)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BookOpen size={24} style={{ color: 'rgba(255,255,255,0.3)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: '0.25rem' }}>
+                {positions.length === 0 ? 'No options tracked yet' : 'No positions match your filters'}
+              </div>
+              <div style={{ fontSize: '0.85rem' }}>
+                {positions.length === 0 ? 'Log a trade manually or sync your brokerage.' : 'Try adjusting your search or date range.'}
+              </div>
+            </div>
+            {positions.length === 0 && (
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                <Link href="/log-trade" className="btn btn-primary" style={{ padding: '0.5rem 1rem', textDecoration: 'none', fontSize: '0.8rem' }}>
+                  <Plus size={14} /> Log Trade
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           sortedGroups.map(([symbol, symbolPositions]) => {
