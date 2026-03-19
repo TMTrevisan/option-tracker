@@ -46,7 +46,6 @@ export async function linkTradeToPosition(
 
   if (!existingPos) {
     // 2. CREATE NEW POSITION
-    // Side is determined by the first trade and the inferred strategy
     const isShortIntent = /Short|Covered|STO/i.test(strategy || '');
     const side = isShortIntent ? 'SHORT' : (tType === 'BUY' || tType === 'BTO' || tType === 'LONG' ? 'LONG' : 'SHORT');
     
@@ -85,16 +84,13 @@ export async function linkTradeToPosition(
 
   } else {
     // 3. UPDATE EXISTING POSITION
-    const pos = existingPos as any;
+    const pos = existingPos;
     const isLong = pos.side === 'LONG';
     
-    // Determine if trade is Opening (adding size) or Closing (reducing size)
     let isOpening = false;
     if (isLong) {
-      // Long position: BUY adds, SELL closes
       isOpening = ['BUY', 'BTO', 'LONG'].includes(tType);
     } else {
-      // Short position: SELL adds, BUY closes
       isOpening = ['SELL', 'STO', 'SHORT'].includes(tType);
     }
 
@@ -107,27 +103,24 @@ export async function linkTradeToPosition(
        newClosedQty += trade.quantity;
     }
 
-    // A position closes when we've traded as many units in the closing direction as in the opening direction
     let newStatus = 'OPEN';
     if (newClosedQty >= newOpenQty) {
        newStatus = (tType === 'ASSIGNMENT' || tType === 'EXERCISE') ? 'ASSIGNED' : 'CLOSED';
     }
 
-    // Money math
     let premiumAdjustment = 0;
     let costAdjustment = 0;
     
     if (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') {
-      if (!isLong) premiumAdjustment += cashImpact; // Adding to a short
-      else costAdjustment -= cashImpact; // Reducing a long (selling)
+      if (!isLong) premiumAdjustment += cashImpact;
+      else costAdjustment -= cashImpact; 
     }
     
     if (tType === 'BUY' || tType === 'BTO' || tType === 'BTC' || tType === 'COVER') {
-      if (isLong) costAdjustment += cashImpact; // Adding to a long
-      else premiumAdjustment -= cashImpact; // Buying back a short
+      if (isLong) costAdjustment += cashImpact; 
+      else premiumAdjustment -= cashImpact; 
     }
 
-    // Net P/L calculation on close
     let realizedPl = Number(pos.realized_pl || 0);
     if (newStatus === 'CLOSED' || newStatus === 'ASSIGNED') {
        realizedPl = (Number(pos.total_premium_kept || 0) + premiumAdjustment) - (Number(pos.adjusted_cost_basis || 0) + costAdjustment) - (Number(pos.total_fees || 0) + (trade.fees || 0));
