@@ -1,7 +1,20 @@
 'use client';
-import { useState, useMemo } from 'react';
-import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2 } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
+
+type LiveQuote = {
+  price?: number;
+  open_pl?: number;
+  open_pl_pct?: number;
+  option_mark?: number;
+  option_avg_cost?: number;
+  option_units?: number;
+  option_open_pl?: number;
+  iv?: number;
+  underlying_price?: number;
+  open_interest?: number;
+};
 
 type Trade = {
   id: string;
@@ -66,12 +79,17 @@ function TradeChip({ trade }: { trade: Trade }) {
   );
 }
 
-function PositionModal({ position, onClose }: { position: Position; onClose: () => void }) {
+function PositionModal({ position, onClose, livePrices }: { position: Position; onClose: () => void; livePrices: Record<string, LiveQuote> }) {
   const trades = position.trades || [];
   const pl = position.realized_pl ?? 0;
   const fees = position.total_fees ?? 0;
   const avgPrice = trades.length > 0 ? trades.reduce((s, t) => s + t.price, 0) / trades.length : 0;
   const statusColor = STATUS_COLORS[position.status] || '#6b7280';
+  const live = livePrices[position.symbol];
+  const openPL = live?.option_open_pl ?? live?.open_pl;
+  const mark = live?.option_mark ?? live?.price;
+  const iv = live?.iv;
+  const underlying = live?.underlying_price;
 
   return (
     <div
@@ -98,9 +116,15 @@ function PositionModal({ position, onClose }: { position: Position; onClose: () 
         {/* Stats Row */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           {[
-            { label: position.status === 'OPEN' ? 'OPEN P/L' : 'NET P/L', value: position.status === 'OPEN' ? 'N/A' : `${pl >= 0 ? '+' : ''}$${pl.toFixed(2)}`, color: pl > 0 ? '#10b981' : pl < 0 ? '#f87171' : 'rgba(255,255,255,0.7)' },
-            { label: 'AVG TRD PR', value: `$${avgPrice.toFixed(2)}`, color: '#10b981' },
-            { label: 'TOTAL FEES', value: `$${fees.toFixed(2)}`, color: '#f87171' },
+            { label: position.status === 'OPEN' ? 'OPEN P/L' : 'NET P/L',
+              value: position.status === 'OPEN'
+                ? (openPL != null ? `${openPL >= 0 ? '+' : ''}$${openPL.toFixed(2)}` : 'Live…')
+                : `${pl >= 0 ? '+' : ''}$${pl.toFixed(2)}`,
+              color: position.status === 'OPEN'
+                ? (openPL != null ? (openPL > 0 ? '#10b981' : openPL < 0 ? '#f87171' : 'rgba(255,255,255,0.7)') : 'rgba(255,255,255,0.3)')
+                : (pl > 0 ? '#10b981' : pl < 0 ? '#f87171' : 'rgba(255,255,255,0.7)') },
+            { label: 'MARK / AVG', value: mark != null ? `$${mark.toFixed(2)} / $${avgPrice.toFixed(2)}` : `$${avgPrice.toFixed(2)}`, color: '#10b981' },
+            { label: 'FEES', value: `$${fees.toFixed(2)}`, color: '#f87171' },
           ].map((stat, i) => (
             <div key={stat.label} style={{ padding: '1rem 1.25rem', textAlign: 'center', borderRight: i < 2 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
               <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', fontWeight: 600, letterSpacing: '0.08em', marginBottom: '0.4rem' }}>{stat.label}</div>
@@ -109,7 +133,15 @@ function PositionModal({ position, onClose }: { position: Position; onClose: () 
           ))}
         </div>
 
-        {/* Trade Timeline */}
+        {/* Live Market Data Row — only shown if data available */}
+        {(mark != null || iv != null || underlying != null) && (
+          <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1.5rem', backgroundColor: 'rgba(16,185,129,0.05)', borderBottom: '1px solid rgba(16,185,129,0.1)' }}>
+            <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.08em', alignSelf: 'center' }}>LIVE</span>
+            {mark != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Mark <strong style={{ color: '#fff' }}>${mark.toFixed(2)}</strong></span>}
+            {underlying != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>Underlying <strong style={{ color: '#fff' }}>${underlying.toFixed(2)}</strong></span>}
+            {iv != null && <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>IV <strong style={{ color: '#f59e0b' }}>{(iv * 100).toFixed(1)}%</strong></span>}
+          </div>
+        )}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {trades.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: '0.875rem', padding: '2.5rem 0' }}>
@@ -168,11 +200,12 @@ function PositionModal({ position, onClose }: { position: Position; onClose: () 
 }
 
 // Ticker accordion row — fires the parent's onSelect callback instead of managing own modal
-function TickerGroup({ symbol, positions, ytdPL, onSelect }: {
+function TickerGroup({ symbol, positions, ytdPL, onSelect, livePrices }: {
   symbol: string;
   positions: Position[];
   ytdPL: number;
   onSelect: (pos: Position) => void;
+  livePrices: Record<string, LiveQuote>;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -219,9 +252,17 @@ function TickerGroup({ symbol, positions, ytdPL, onSelect }: {
               <span style={{ fontWeight: 700, fontSize: '0.8rem', color: pl > 0 ? '#10b981' : pl < 0 ? '#f87171' : 'rgba(255,255,255,0.4)' }}>
                 {pl >= 0 ? '+' : ''}${pl.toFixed(2)}
               </span>
-            ) : (
-              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)' }}>Open</span>
-            )}
+            ) : (() => {
+              const lq = livePrices?.[pos.symbol];
+              const openPL = lq?.option_open_pl ?? lq?.open_pl;
+              if (openPL != null) return (
+                <span style={{ fontWeight: 700, fontSize: '0.8rem', color: openPL > 0 ? '#10b981' : openPL < 0 ? '#f87171' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Zap size={10} />{openPL >= 0 ? '+' : ''}${openPL.toFixed(2)}
+                </span>
+              );
+              return <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)' }}>Live…</span>;
+            })()
+            }
             <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.2)', marginLeft: '0.5rem' }}>—</span>
           </div>
         );
@@ -239,6 +280,16 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
+  const [livePrices, setLivePrices] = useState<Record<string, LiveQuote>>({});
+  const [pricesLoading, setPricesLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/prices')
+      .then(r => r.json())
+      .then(d => { if (d.prices) setLivePrices(d.prices); })
+      .catch(() => {})
+      .finally(() => setPricesLoading(false));
+  }, []);
 
   const toggleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -317,7 +368,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     <>
       {/* MODAL — rendered at top level, outside any overflow:hidden container */}
       {selectedPosition && (
-        <PositionModal position={selectedPosition} onClose={() => setSelectedPosition(null)} />
+        <PositionModal position={selectedPosition} onClose={() => setSelectedPosition(null)} livePrices={livePrices} />
       )}
 
       {/* Filter Bar */}
@@ -390,6 +441,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
                 positions={symbolPositions}
                 ytdPL={ytdPL}
                 onSelect={setSelectedPosition}
+                livePrices={livePrices}
               />
             );
           })
