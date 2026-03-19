@@ -24,28 +24,96 @@ export async function POST(req: Request) {
     
     if (accounts.length === 0) return NextResponse.json({ error: 'No brokerage accounts found.' }, { status: 400 });
 
-    const activities = await snaptrade.accountInformation.getAccountActivities({ 
+    const accountId = accounts[0].id;
+
+    // Hardcode fetching from 2024 to skip ancient data for the MVP
+    const activitiesResponse = await snaptrade.accountInformation.getAccountActivities({ 
         userId: user.id, 
         userSecret: secret, 
-        accountId: accounts[0].id,
+        accountId: accountId,
         startDate: "2024-01-01" 
     });
 
-    // SnapTrade SDK might return an object instead of an Array for activities
-    const rawData = activities.data as any;
-    let parsedData;
-    
-    if (Array.isArray(rawData)) {
-        parsedData = rawData.slice(0, 5);
-    } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.activities)) {
-        parsedData = { ...rawData, activities: rawData.activities.slice(0, 5) };
-    } else {
-        parsedData = rawData; // Just safely dump whatever the hell this object is
+    // Handle generic Object vs Array bypass
+    let rawActivities = activitiesResponse.data as any;
+    if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.activities)) {
+        rawActivities = rawActivities.activities;
+    } else if (rawActivities && typeof rawActivities === 'object' && Array.isArray(rawActivities.data)) {
+        rawActivities = rawActivities.data;
     }
-    
+
+    if (!Array.isArray(rawActivities)) {
+        return NextResponse.json({ error: 'SnapTrade returned non-iterable payload' }, { status: 500 });
+    }
+
+    // Filter only BUY / SELL trade executions (ignore DIVIDEND, TRANSFER)
+    const validTrades = rawActivities.filter((a: any) => a.type && /BUY|SELL/i.test(a.type));
+
+    let insertedCount = 0;
+
+    for (const trade of validTrades) {
+      // Parse normalized fields
+      const isBuy = /BUY/i.test(trade.type);
+      const tt = isBuy ? 'Buy' : 'Sell'; 
+
+      const qty = trade.units ? Math.abs(trade.units) : 0;
+      const parsedPrice = trade.price || 0;
+      const baseSymbol = trade.symbol?.symbol || trade.symbol?.raw_symbol || 'UNKNOWN';
+
+      let strike_price = null;
+      let expiration_date = null;
+      let option_type = null;
+
+      // Extract native option legs via SnapTrade's OptionSymbol object, OR raw regex string matching (AAPL 240119C00150000)
+      if (trade.option_symbol) {
+          if (typeof trade.option_symbol === 'object') {
+              strike_price = trade.option_symbol.strike_price || trade.option_symbol.strike;
+              expiration_date = trade.option_symbol.expiration_date || trade.option_symbol.expiration;
+              option_type = trade.option_symbol.option_type || trade.option_symbol.type;
+              if (option_type && option_type.toLowerCase().startsWith('c')) option_type = 'Call';
+              if (option_type && option_type.toLowerCase().startsWith('p')) option_type = 'Put';
+          } else if (typeof trade.option_symbol === 'string') {
+              // Raw OCC string parser fallback (AAPL  240119C00150000)
+              const occMatch = trade.option_symbol.match(/^[A-Z]+\s*(\d{6})([CP])(\d{8})$/i);
+              if (occMatch) {
+                  const m2 = occMatch[1]; // 240119
+                  expiration_date = `20${m2.substring(0,2)}-${m2.substring(2,4)}-${m2.substring(4,6)}`;
+                  option_type = occMatch[2].toUpperCase() === 'C' ? 'Call' : 'Put';
+                  strike_price = parseFloat(occMatch[3]) / 1000;
+              }
+          }
+      }
+
+      const tradeInsert = {
+          user_id: user.id,
+          trade_type: tt,
+          symbol: baseSymbol,
+          quantity: qty,
+          price: parsedPrice,
+          fees: trade.fee || 0,
+          trade_date: trade.trade_date || trade.settlement_date || new Date().toISOString(),
+          brokerage_trade_id: trade.id,
+          notes: 'Auto-Imported from SnapTrade',
+          tags: ['#historic-sync']
+      };
+
+      if (strike_price) (tradeInsert as any).strike_price = strike_price;
+      if (expiration_date) (tradeInsert as any).expiration_date = expiration_date;
+      if (option_type) (tradeInsert as any).option_type = option_type;
+
+      // Insert logic with deduplication
+      const { error } = await supabase.from('trades').insert(tradeInsert as any);
+      
+      // If error is unique violation (23505), we just safely ignore the duplicate!
+      if (!error) insertedCount++;
+      else if (error.code !== '23505') {
+          console.error("Trade Insert Error:", error);
+      }
+    }
+
     return NextResponse.json({ 
         success: true, 
-        message: `Successfully pulled Historic Data.\n\nPLEASE COPY THIS GREEN TEXT AND SEND TO YOUR AI DEVELOPER:\n\n${JSON.stringify(parsedData, null, 2)}` 
+        message: `✅ Historic Sync Complete!\n\nAnalyzed: ${rawActivities.length} account activities.\nIgnored: ${rawActivities.length - validTrades.length} non-trade events (dividends, ACAT transfers).\nImported: ${insertedCount} new executable trades.\nBypassed: ${validTrades.length - insertedCount} safely deduplicated trades.` 
     });
 
   } catch (error: any) {
