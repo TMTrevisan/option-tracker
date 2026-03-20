@@ -19,6 +19,6 @@
 *Making the app feel like a $50/month SaaS.*
 
 6.  [ ] **URL State Persistence:** Sync the Date Range and Strategy filters to the URL query parameters (`?range=3m&strategy=Short+Put`). This allows for shareable links and maintains filter states when navigating between Options and Analytics.
-7.  [ ] **Skeleton Loaders:** Replace the basic spinners with animated CSS skeleton rows for tables and stat cards while data is fetching.
+7.  [x] **Skeleton Loaders:** Replace the basic spinners with animated CSS skeleton rows for tables and stat cards while data is fetching.
 8.  [ ] **"Campaign" View for Rolls:** Create a visual grouping or a dedicated "Roll History" tab inside the `PositionModal` that links chronologically adjacent positions on the same underlying, calculating the true net P/L of an entire rolling campaign.
 9.  [ ] **Supabase Realtime:** Wire up Supabase WebSockets so that if a webhook fires from Robinhood in the background, the UI updates the row status and P/L instantly without a page refresh.
