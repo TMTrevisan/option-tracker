@@ -27,6 +27,7 @@ export interface Position {
   strike_price?: number;
   expiration_date?: string;
   option_type?: 'CALL' | 'PUT';
+  occ_symbol?: string;
   adjusted_cost_basis: number;
   total_premium_kept: number;
   total_fees: number;
@@ -34,7 +35,7 @@ export interface Position {
   tags?: string[];
   open_quantity: number;
   closed_quantity: number;
-  wash_sale_adjusted: boolean;
+  wash_sale_adjusted?: boolean;
   created_at: string;
   updated_at: string;
 }

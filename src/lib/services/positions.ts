@@ -66,6 +66,7 @@ export async function linkTradeToPosition(
       realized_pl: 0,
       open_quantity: trade.quantity,
       closed_quantity: 0,
+      wash_sale_adjusted: false,
       tags: trade.tags || []
     };
 
