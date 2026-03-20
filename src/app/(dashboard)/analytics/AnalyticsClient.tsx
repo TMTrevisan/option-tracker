@@ -4,7 +4,7 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, ReferenceLine, PieChart, Pie, Legend,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Target, Clock, Award, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, Clock, Award, AlertTriangle, Zap } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 
 type Position = {
@@ -110,6 +110,40 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
   const profitFactor = Math.abs(avgLoss) > 0 ? Math.abs(avgWin / avgLoss) : 0;
   const totalFees = filteredPositions.reduce((s, p) => s + (p.total_fees || 0), 0);
 
+  // --- Streaks ---
+  const streaks = useMemo(() => {
+    let currentStreak = 0;
+    let maxWinStreak = 0;
+    let maxLossStreak = 0;
+    let isWinning = true;
+
+    // Sort closed positions chronologically by closing date
+    const sortedClosed = [...closed].sort((a, b) => {
+      const d1 = new Date(a.updated_at || a.created_at || 0).getTime();
+      const d2 = new Date(b.updated_at || b.created_at || 0).getTime();
+      return d1 - d2;
+    });
+
+    sortedClosed.forEach(p => {
+      const won = (p.realized_pl || 0) > 0;
+      if (won) {
+        if (!isWinning) { isWinning = true; currentStreak = 0; }
+        currentStreak++;
+        maxWinStreak = Math.max(maxWinStreak, currentStreak);
+      } else {
+        if (isWinning) { isWinning = false; currentStreak = 0; }
+        currentStreak++;
+        maxLossStreak = Math.max(maxLossStreak, currentStreak);
+      }
+    });
+
+    return { 
+      current: currentStreak > 0 ? `${currentStreak}${isWinning ? 'W' : 'L'}` : '0',
+      maxWin: maxWinStreak,
+      maxLoss: maxLossStreak
+    };
+  }, [closed]);
+
   // --- Avg DTE ---
   const avgDTE = useMemo(() => {
     let totalDays = 0;
@@ -214,10 +248,11 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
       </div>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem' }}>
         <StatCard label="TOTAL P/L" value={`${totalPL >= 0 ? '+' : ''}$${totalPL.toFixed(2)}`} sub={`${closed.length} closed positions`} icon={<TrendingUp size={20} />} color={totalPL >= 0 ? '#10b981' : '#f87171'} />
         <StatCard label="WIN RATE" value={`${winRate.toFixed(1)}%`} sub={`${wins.length}W · ${losses.length}L`} icon={<Target size={20} />} color="#60a5fa" />
         <StatCard label="PROFIT FACTOR" value={profitFactor > 0 ? profitFactor.toFixed(2) : '—'} sub={`Avg win $${avgWin.toFixed(0)} · Avg loss $${Math.abs(avgLoss).toFixed(0)}`} icon={<Award size={20} />} color="#a78bfa" />
+        <StatCard label="STREAK" value={streaks.current} sub={`Max: ${streaks.maxWin}W · ${streaks.maxLoss}L`} icon={<Zap size={20} />} color="#f43f5e" />
         <StatCard label="AVG DTE" value={`${avgDTE} days`} sub="At position open" icon={<Clock size={20} />} color="#38bdf8" />
         <StatCard label="TOTAL FEES" value={`$${totalFees.toFixed(2)}`} sub="All time" icon={<AlertTriangle size={20} />} color="#f59e0b" />
       </div>

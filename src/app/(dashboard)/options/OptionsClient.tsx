@@ -440,6 +440,20 @@ function TickerGroup({ symbol, positions, ytdPL, onSelect, livePrices }: {
         const statusColor = STATUS_COLORS[pos.status] || '#6b7280';
         const pl = pos.realized_pl ?? 0;
 
+        // Extract contract details for ITM/OTM calculation
+        const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
+        const strike = optionTrade?.strike_price;
+        const expiration = optionTrade?.expiration_date;
+        const type = (optionTrade?.option_type || 'CALL').toUpperCase();
+        const key = strike ? `${pos.symbol}|${strike}|${expiration}|${type}` : pos.symbol;
+        const lq = livePrices?.[key] || livePrices?.[pos.symbol];
+        
+        let isITM = false;
+        if (pos.status === 'OPEN' && strike && lq?.underlying_price) {
+           if (type === 'CALL') isITM = lq.underlying_price >= strike;
+           if (type === 'PUT') isITM = lq.underlying_price <= strike;
+        }
+
         return (
           <div
             key={pos.id}
@@ -451,6 +465,9 @@ function TickerGroup({ symbol, positions, ytdPL, onSelect, livePrices }: {
             <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0 }} />
             <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255,255,255,0.5)', minWidth: '90px' }}>{pos.strategy || 'Option Trade'}</span>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: statusColor, backgroundColor: statusColor + '22', border: `1px solid ${statusColor}44`, borderRadius: '10px', padding: '0.1rem 0.5rem' }}>{pos.status}</span>
+            {pos.status === 'OPEN' && isITM && (
+               <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '4px', padding: '0.1rem 0.3rem' }}>ITM</span>
+            )}
             {latestTrade && <TradeChip trade={latestTrade} />}
             <div style={{ flex: 1 }} />
             {pos.status !== 'OPEN' ? (
@@ -458,12 +475,6 @@ function TickerGroup({ symbol, positions, ytdPL, onSelect, livePrices }: {
                 {pl >= 0 ? '+' : ''}${pl.toFixed(2)}
               </span>
             ) : (() => {
-              const optionTrade = trades.find(t => t.strike_price && t.expiration_date);
-              const strike = optionTrade?.strike_price;
-              const expiration = optionTrade?.expiration_date;
-              const type = (optionTrade?.option_type || 'CALL').toUpperCase();
-              const key = strike ? `${pos.symbol}|${strike}|${expiration}|${type}` : pos.symbol;
-              const lq = livePrices?.[key] || livePrices?.[pos.symbol];
               const openPL = lq?.option_open_pl ?? lq?.open_pl;
               if (openPL != null) return (
                 <span style={{ fontWeight: 700, fontSize: '0.8rem', color: openPL > 0 ? '#10b981' : openPL < 0 ? '#f87171' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
