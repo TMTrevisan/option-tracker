@@ -88,7 +88,7 @@ function TradeChip({ trade }: { trade: Trade }) {
   );
 }
 
-function PositionModal({ position, onClose, livePrices }: { position: Position; onClose: () => void; livePrices: Record<string, LiveQuote> }) {
+function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { position: Position; allSymbolPositions: Position[]; onClose: () => void; livePrices: Record<string, LiveQuote> }) {
   const trades = position.trades || [];
   const pl = position.realized_pl ?? 0;
   const fees = position.total_fees ?? 0;
@@ -220,86 +220,148 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
             )}
           </div>
         )}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {trades.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: '0.875rem', padding: '2.5rem 0' }}>
-              <p>No trade executions linked to this position.</p>
-              <p style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>Run Sync &amp; Import to pull your full trade history.</p>
-            </div>
-          ) : trades.map((trade, i) => {
-            const isBuy = /BTO|BUY|BTC|COVER/i.test(trade.trade_type);
-            const isClose = /BTC|STC|COVER|SELL/i.test(trade.trade_type);
-            const dotColor = i === 0 ? '#3b82f6' : isClose ? '#f87171' : '#10b981';
-            const labelText = i === 0 ? 'Current Position' : isClose ? 'Close' : 'Open';
-            const tradePL = isClose ? trade.price * trade.quantity : trade.price * trade.quantity;
 
-            return (
-              <div key={trade.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: dotColor, flexShrink: 0 }} />
-                    <span style={{ fontWeight: 600, fontSize: '0.875rem', color: dotColor }}>{labelText}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>{formatDate(trade.trade_date)}</span>
+        {isCampaign && (
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 1.5rem', gap: '1.5rem', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+            <button 
+              onClick={() => setActiveTab('trades')} 
+              style={{ background: 'none', border: 'none', padding: '0.75rem 0', fontSize: '0.8rem', fontWeight: 600, color: activeTab === 'trades' ? '#fff' : 'rgba(255,255,255,0.4)', borderBottom: activeTab === 'trades' ? '2px solid #3b82f6' : '2px solid transparent', cursor: 'pointer' }}
+            >
+              Current Contract
+            </button>
+            <button 
+              onClick={() => setActiveTab('campaign')} 
+              style={{ background: 'none', border: 'none', padding: '0.75rem 0', fontSize: '0.8rem', fontWeight: 600, color: activeTab === 'campaign' ? '#10b981' : 'rgba(255,255,255,0.4)', borderBottom: activeTab === 'campaign' ? '2px solid #10b981' : '2px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              Roll Campaign <span style={{ backgroundColor: 'rgba(16,185,129,0.2)', padding: '0.1rem 0.4rem', borderRadius: '10px', fontSize: '0.7rem' }}>{campaignPositions.length}</span>
+            </button>
+          </div>
+        )}
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {activeTab === 'trades' ? (
+            trades.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: '0.875rem', padding: '2.5rem 0' }}>
+                <p>No trade executions linked to this position.</p>
+                <p style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>Run Sync &amp; Import to pull your full trade history.</p>
+              </div>
+            ) : trades.map((trade, i) => {
+              const isBuy = /BTO|BUY|BTC|COVER/i.test(trade.trade_type);
+              const isClose = /BTC|STC|COVER|SELL/i.test(trade.trade_type);
+              const dotColor = i === 0 ? '#3b82f6' : isClose ? '#f87171' : '#10b981';
+              const labelText = i === 0 ? 'Current Position' : isClose ? 'Close' : 'Open';
+              const tradePL = isClose ? trade.price * trade.quantity : trade.price * trade.quantity;
+
+              return (
+                <div key={trade.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: dotColor, flexShrink: 0 }} />
+                      <span style={{ fontWeight: 600, fontSize: '0.875rem', color: dotColor }}>{labelText}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>{formatDate(trade.trade_date)}</span>
+                    </div>
+                    {i > 0 && (
+                      <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#10b981' }}>
+                        +${tradePL.toFixed(2)}
+                      </span>
+                    )}
                   </div>
-                  {i > 0 && (
-                    <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#10b981' }}>
-                      +${tradePL.toFixed(2)}
-                    </span>
+                  {(trade.fees ?? 0) > 0 && (
+                    <div style={{ paddingLeft: '1.25rem', fontSize: '0.72rem', color: '#f87171', marginBottom: '0.3rem' }}>
+                      ⊖ ${(trade.fees!).toFixed(2)} fees
+                    </div>
                   )}
-                </div>
-                {(trade.fees ?? 0) > 0 && (
-                  <div style={{ paddingLeft: '1.25rem', fontSize: '0.72rem', color: '#f87171', marginBottom: '0.3rem' }}>
-                    ⊖ ${(trade.fees!).toFixed(2)} fees
+                  <div style={{ paddingLeft: '1.25rem', marginBottom: '0.4rem' }}>
+                    <TradeChip trade={trade} />
                   </div>
-                )}
-                <div style={{ paddingLeft: '1.25rem', marginBottom: '0.4rem' }}>
-                  <TradeChip trade={trade} />
-                </div>
-                <div style={{ marginLeft: '1.25rem', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {editingNote === trade.id ? (
-                    <div style={{ display: 'flex', gap: '0.5rem', width: '100%', alignItems: 'center' }}>
-                      <input 
-                        type="text" 
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                        autoFocus
-                        onKeyDown={async (e) => {
-                          if (e.key === 'Enter') {
+                  <div style={{ marginLeft: '1.25rem', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {editingNote === trade.id ? (
+                      <div style={{ display: 'flex', gap: '0.5rem', width: '100%', alignItems: 'center' }}>
+                        <input 
+                          type="text" 
+                          value={noteText}
+                          onChange={(e) => setNoteText(e.target.value)}
+                          autoFocus
+                          onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                              setEditingNote(null);
+                              await updateTradeNote(trade.id, noteText);
+                              router.refresh();
+                            } else if (e.key === 'Escape') {
+                              setEditingNote(null);
+                            }
+                          }}
+                          style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '6px', padding: '0.4rem 0.75rem', fontSize: '0.78rem', color: '#fff', outline: 'none' }}
+                        />
+                        <button 
+                          onClick={async () => {
                             setEditingNote(null);
                             await updateTradeNote(trade.id, noteText);
                             router.refresh();
-                          } else if (e.key === 'Escape') {
-                            setEditingNote(null);
-                          }
-                        }}
-                        style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '6px', padding: '0.4rem 0.75rem', fontSize: '0.78rem', color: '#fff', outline: 'none' }}
-                      />
-                      <button 
-                        onClick={async () => {
-                          setEditingNote(null);
-                          await updateTradeNote(trade.id, noteText);
-                          router.refresh();
-                        }}
-                        style={{ background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '6px', padding: '0.4rem', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          }}
+                          style={{ background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '6px', padding: '0.4rem', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          <Check size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div 
+                        style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', padding: '0.55rem 0.875rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)', display: 'flex', gap: '0.5rem', position: 'relative', cursor: 'pointer' }}
+                        onClick={() => { setEditingNote(trade.id); setNoteText(trade.notes || ''); }}
+                        title="Click to edit notes"
                       >
-                        <Check size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div 
-                      style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', padding: '0.55rem 0.875rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)', display: 'flex', gap: '0.5rem', position: 'relative', cursor: 'pointer' }}
-                      onClick={() => { setEditingNote(trade.id); setNoteText(trade.notes || ''); }}
-                      title="Click to edit notes"
-                    >
-                      <span>📄</span>
-                      <span>{trade.notes || 'Add a note...'}</span>
-                      <Pencil size={12} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.3 }} />
-                    </div>
-                  )}
+                        <span>📄</span>
+                        <span>{trade.notes || 'Add a note...'}</span>
+                        <Pencil size={12} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.3 }} />
+                      </div>
+                    )}
+                  </div>
                 </div>
+              );
+            })
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'rgba(16,185,129,0.05)', borderRadius: '8px', border: '1px dashed rgba(16,185,129,0.2)' }}>
+                <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>Total Campaign Realized P/L</span>
+                <strong style={{ color: campaignRealized >= 0 ? '#10b981' : '#f87171', fontSize: '1rem' }}>{campaignRealized >= 0 ? '+' : ''}${campaignRealized.toFixed(2)}</strong>
               </div>
-            );
-          })}
+              
+              <div style={{ position: 'relative', paddingLeft: '1rem' }}>
+                <div style={{ position: 'absolute', left: '16px', top: '10px', bottom: '20px', width: '2px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                
+                {campaignPositions.map((campPos: any, i) => {
+                  const isCurrent = campPos.id === position.id;
+                  const cpl = campPos.realized_pl || 0;
+                  const cexp = campPos.expiration_date ? new Date(campPos.expiration_date) : null;
+                  const cexpStr = cexp ? `${cexp.getMonth() + 1}/${cexp.getDate()}/${cexp.getFullYear().toString().slice(2)}` : '—';
+                  const dotColor = isCurrent ? '#3b82f6' : '#6b7280';
+                  
+                  return (
+                    <div key={campPos.id} style={{ position: 'relative', paddingLeft: '1.5rem', marginBottom: '1.5rem' }}>
+                      <div style={{ position: 'absolute', left: '-5px', top: '4px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: dotColor, border: '2px solid #0f1117', zIndex: 2 }} />
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
+                        <div>
+                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: isCurrent ? '#fff' : 'rgba(255,255,255,0.6)' }}>
+                            {campPos.symbol} ${campPos.strike_price} {campPos.option_type}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginLeft: '0.5rem' }}>Exp: {cexpStr}</span>
+                          {isCurrent && <span style={{ marginLeft: '0.5rem', backgroundColor: 'rgba(59,130,246,0.2)', color: '#60a5fa', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700 }}>CURRENT</span>}
+                        </div>
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: cpl >= 0 ? '#10b981' : '#f87171', opacity: isCurrent ? 1 : 0.6 }}>
+                          {cpl >= 0 ? '+' : ''}${cpl.toFixed(2)}
+                        </span>
+                      </div>
+                      
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
+                        {formatDate(campPos.openedAt)} — {campPos.closedAt ? formatDate(campPos.closedAt) : 'Open'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -521,6 +583,11 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
 
   const visibleGroups = sortedGroups.slice(0, renderLimit);
 
+  const allSymbolPositionsForSelected = useMemo(() => {
+    if (!selectedPosition) return [];
+    return positions.filter(p => p.symbol === selectedPosition.symbol);
+  }, [selectedPosition, positions]);
+
   const totalRealizedPL = filtered.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
   const totalOpenPL = useMemo(() => {
     return filtered.reduce((acc, p) => {
@@ -561,7 +628,12 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     <>
       {/* MODAL — rendered at top level, outside any overflow:hidden container */}
       {selectedPosition && (
-        <PositionModal position={selectedPosition} onClose={() => setSelectedPosition(null)} livePrices={livePrices} />
+        <PositionModal 
+          position={selectedPosition} 
+          allSymbolPositions={allSymbolPositionsForSelected}
+          onClose={() => setSelectedPosition(null)} 
+          livePrices={livePrices} 
+        />
       )}
 
       {/* Filter Bar */}
