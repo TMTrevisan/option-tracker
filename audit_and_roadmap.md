@@ -21,6 +21,7 @@
 | Dashboard charts & Analytics | Real P/L, Win Rate, Strategy Mix, Avg DTE |
 | Analytics Date Range Filter | Added time-boxed performance analysis |
 | Toast notification system | Global feedback for actions |
+| Add Account loading state | Shows spinner during SnapTrade OAuth redirect |
 
 ---
 
@@ -44,7 +45,6 @@
 | # | Area | Issue | Fix |
 |---|------|-------|-----|
 | 3 | **Trade modal** | Need ability to edit trade notes post-sync. | Add a small "Edit" pencil icon next to notes in the timeline. |
-| 4 | **Brokerage page** | "Add Account" button redirect has no loading state. | Show "Loading..." spinner during SnapTrade OAuth redirect. |
 
 ---
 
