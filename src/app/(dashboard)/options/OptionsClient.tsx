@@ -121,6 +121,67 @@ function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { 
     ? (optionType === 'CALL' ? strike + avgPrice : strike - avgPrice) 
     : null;
 
+  // --- Campaign (Roll) Detection ---
+  const campaignPositions = useMemo(() => {
+    if (!allSymbolPositions || allSymbolPositions.length < 2) return [position];
+    
+    // 1. Sort all positions of the SAME side by their earliest trade date
+    const sideMatch = (p: Position) => {
+       const isShortA = /Short|Covered|STO/i.test(position.strategy || '');
+       const isShortB = /Short|Covered|STO/i.test(p.strategy || '');
+       return isShortA === isShortB;
+    };
+    
+    const candidates = allSymbolPositions.filter(sideMatch).map(p => {
+      const pTrades = [...(p.trades || [])].sort((a, b) => new Date(a.trade_date || 0).getTime() - new Date(b.trade_date || 0).getTime());
+      return { 
+        ...p, 
+        pTrades,
+        openedAt: pTrades.length > 0 ? new Date(pTrades[0].trade_date || 0).getTime() : 0,
+        closedAt: p.status === 'CLOSED' && pTrades.length > 0 ? new Date(pTrades[pTrades.length - 1].trade_date || 0).getTime() : null
+      };
+    }).sort((a, b) => a.openedAt - b.openedAt);
+
+    // 2. Build the chain starting from the selected position
+    const chain: typeof candidates = [];
+    const selectedIdx = candidates.findIndex(c => c.id === position.id);
+    if (selectedIdx === -1) return [position];
+
+    chain.push(candidates[selectedIdx]);
+
+    // Walk backwards to find previous rolls
+    let current = candidates[selectedIdx];
+    for (let i = selectedIdx - 1; i >= 0; i--) {
+      const prev = candidates[i];
+      if (prev.closedAt) {
+        const diffHours = Math.abs(current.openedAt - prev.closedAt) / (1000 * 60 * 60);
+        if (diffHours <= 72) { // Rolled within 3 days
+          chain.unshift(prev);
+          current = prev;
+        }
+      }
+    }
+
+    // Walk forwards to find future rolls
+    current = candidates[selectedIdx];
+    for (let i = selectedIdx + 1; i < candidates.length; i++) {
+      const next = candidates[i];
+      if (current.closedAt) {
+        const diffHours = Math.abs(next.openedAt - current.closedAt) / (1000 * 60 * 60);
+        if (diffHours <= 72) {
+          chain.push(next);
+          current = next;
+        }
+      }
+    }
+
+    return chain;
+  }, [position, allSymbolPositions]);
+
+  const [activeTab, setActiveTab] = useState<'trades' | 'campaign'>('trades');
+  const campaignRealized = campaignPositions.reduce((s, p) => s + (p.realized_pl || 0), 0);
+  const isCampaign = campaignPositions.length > 1;
+
   const { toast } = useToast();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
