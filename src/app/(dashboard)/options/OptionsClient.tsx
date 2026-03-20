@@ -117,6 +117,10 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
     return calculateGreeks(underPrice, strike, dte / 365, ivValue, 0.05, optionType);
   }, [underPrice, strike, expiration, ivValue, optionType]);
 
+  const breakEven = strike > 0 && avgPrice > 0 
+    ? (optionType === 'CALL' ? strike + avgPrice : strike - avgPrice) 
+    : null;
+
   const { toast } = useToast();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -171,7 +175,7 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
         </div>
 
         {/* Stats Row */}
-        <div className="stats-grid">
+        <div className="stats-grid" style={{ gridTemplateColumns: breakEven ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr' }}>
           {[
             { label: position.status === 'OPEN' ? 'OPEN P/L' : 'NET P/L',
               value: position.status === 'OPEN'
@@ -181,9 +185,10 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
                 ? (openPL != null ? (openPL > 0 ? '#10b981' : openPL < 0 ? '#f87171' : 'rgba(255,255,255,0.7)') : 'rgba(255,255,255,0.3)')
                 : (pl > 0 ? '#10b981' : pl < 0 ? '#f87171' : 'rgba(255,255,255,0.7)') },
             { label: 'MARK / AVG', value: mark != null ? `$${mark.toFixed(2)} / $${avgPrice.toFixed(2)}` : `$${avgPrice.toFixed(2)}`, color: '#10b981' },
+            ...(breakEven ? [{ label: 'BREAK-EVEN', value: `$${breakEven.toFixed(2)}`, color: 'var(--text-primary)' }] : []),
             { label: 'FEES', value: `$${fees.toFixed(2)}`, color: '#f87171' },
-          ].map((stat, i) => (
-            <div key={stat.label} style={{ padding: '1rem 1.25rem', textAlign: 'center', borderRight: i < 2 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+          ].map((stat, i, arr) => (
+            <div key={stat.label} style={{ padding: '1rem 1.25rem', textAlign: 'center', borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
               <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', fontWeight: 600, letterSpacing: '0.08em', marginBottom: '0.4rem' }}>{stat.label}</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: stat.color }}>{stat.value}</div>
             </div>
