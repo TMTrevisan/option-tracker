@@ -76,12 +76,13 @@ export async function linkTradeToPosition(
       insertData.option_type = trade.option_type;
     }
 
-    const { data: newPos, error } = await supabase.from('positions').insert(insertData).select().single();
+    // @ts-ignore
+    const { data: newPos, error } = await supabase.from('positions').insert(insertData as any).select().single();
     if (error) {
       console.error('Error creating position:', error);
       return null;
     }
-    return newPos.id;
+    return (newPos as any).id;
 
   } else {
     // 3. UPDATE EXISTING POSITION
@@ -139,6 +140,7 @@ export async function linkTradeToPosition(
 
     const uniqueTags = Array.from(new Set([...(pos.tags || []), ...(trade.tags || [])]));
 
+    // @ts-ignore
     const { error } = await supabase.from('positions')
       .update({
         status: newStatus,
@@ -149,7 +151,7 @@ export async function linkTradeToPosition(
         open_quantity: newOpenQty,
         closed_quantity: newClosedQty,
         tags: uniqueTags
-      })
+      } as any)
       .eq('id', pos.id);
 
     if (error) {
