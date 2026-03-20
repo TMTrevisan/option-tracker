@@ -494,6 +494,35 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
   const [pricesLoading, setPricesLoading] = useState(true);
   const [renderLimit, setRenderLimit] = useState(50);
 
+  // Initialize state from URL on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('search')) setSearch(params.get('search')!);
+      if (params.get('status')) setStatusFilter(params.get('status')!);
+      if (params.get('strategy')) setStrategyFilter(params.get('strategy')!);
+      if (params.get('account')) setAccountFilter(params.get('account')!);
+      if (params.get('sort')) setSortKey(params.get('sort') as any);
+      if (params.get('dir')) setSortDir(params.get('dir') as any);
+    }
+  }, []);
+
+  // Update URL when state changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (search) params.set('search', search); else params.delete('search');
+      if (statusFilter !== 'ALL') params.set('status', statusFilter); else params.delete('status');
+      if (strategyFilter !== 'ALL') params.set('strategy', strategyFilter); else params.delete('strategy');
+      if (accountFilter !== 'ALL') params.set('account', accountFilter); else params.delete('account');
+      if (sortKey !== 'date') params.set('sort', sortKey); else params.delete('sort');
+      if (sortDir !== 'desc') params.set('dir', sortDir); else params.delete('dir');
+      
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  }, [search, statusFilter, strategyFilter, accountFilter, sortKey, sortDir]);
+
   useEffect(() => {
     fetch('/api/prices')
       .then(r => r.json())

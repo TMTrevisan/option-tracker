@@ -63,6 +63,28 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
   const [rollingWindow, setRollingWindow] = useState<30 | 90 | 180 | 365>(90);
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
 
+  // Initialize state from URL on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('window')) {
+        const w = parseInt(params.get('window')!);
+        if ([30, 90, 180, 365].includes(w)) setRollingWindow(w as any);
+      }
+    }
+  }, []);
+
+  // Update URL when state changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (rollingWindow !== 90) params.set('window', rollingWindow.toString()); else params.delete('window');
+      
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  }, [rollingWindow]);
+
   const filteredPositions = useMemo(() => {
     if (!dateRange.from && !dateRange.to) return positions;
     
