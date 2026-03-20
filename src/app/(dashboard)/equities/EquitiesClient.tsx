@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Search, X, Trash2 } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 import { useToast } from '@/components/ToastProvider';
