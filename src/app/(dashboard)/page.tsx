@@ -63,6 +63,12 @@ export default async function DashboardPage() {
     return { month: m, pl: Math.round(pl * 100) / 100, cumulative: Math.round(running * 100) / 100 };
   });
 
+  // Upcoming Expirations
+  const upcomingExpirations = optionPositions
+    .filter(p => p.status === 'OPEN' && p.expiration_date)
+    .sort((a, b) => new Date(a.expiration_date!).getTime() - new Date(b.expiration_date!).getTime())
+    .slice(0, 5);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <div className="flex justify-between items-center">
@@ -77,7 +83,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
         <StatCard
           title="YTD P/L"
           value={`${ytdPL >= 0 ? '+' : ''}$${ytdPL.toFixed(2)}`}
@@ -111,8 +117,10 @@ export default async function DashboardPage() {
       </div>
 
       {/* Main content grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
-        <DashboardChart data={chartData} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <DashboardChart data={chartData} />
+        </div>
 
         {/* Strategy Breakdown */}
         <div className="card" style={{ padding: '1.5rem' }}>
@@ -137,6 +145,51 @@ export default async function DashboardPage() {
               <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
                 <Link href="/options" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none' }}>View Options →</Link>
                 <Link href="/equities" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none' }}>View Equities →</Link>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Upcoming Expirations */}
+        <div className="card" style={{ padding: '1.5rem' }}>
+          <div className="flex items-center gap-2 mb-6 text-sm font-semibold">
+            <div style={{ width: 14, height: 14, border: '2px solid #f87171', borderRadius: '50%' }} />
+            Upcoming Expirations
+          </div>
+
+          {upcomingExpirations.length === 0 ? (
+            <div style={{ backgroundColor: 'var(--bg-input)', borderRadius: 'var(--radius-md)', padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <p className="text-sm">No upcoming expirations.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {upcomingExpirations.map((pos) => {
+                const exp = pos.expiration_date ? new Date(pos.expiration_date) : null;
+                const dte = exp ? Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                
+                return (
+                  <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-input)', borderRadius: '6px', padding: '0.6rem 0.875rem', borderLeft: dte <= 7 ? '3px solid #f87171' : '3px solid #fb923c' }}>
+                    <div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                        {pos.symbol} ${pos.strike_price} {pos.option_type}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        {pos.strategy}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: dte <= 7 ? '#f87171' : '#fb923c' }}>
+                        {dte} {dte === 1 ? 'day' : 'days'}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        {exp ? `${exp.getMonth() + 1}/${exp.getDate()}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
+                <Link href="/options?status=OPEN" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', textDecoration: 'none' }}>Manage Options →</Link>
               </div>
             </div>
           )}
