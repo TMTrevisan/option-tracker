@@ -19,7 +19,8 @@ export async function linkTradeToPosition(
   const assetType = isOption ? 'OPTION' : 'EQUITY';
   
   // 1. Find an existing OPEN position
-  let query = (supabase.from('positions') as any)
+  let query = supabase
+    .from('positions')
     .select('*')
     .eq('user_id', trade.user_id)
     .eq('symbol', trade.symbol)
@@ -36,7 +37,7 @@ export async function linkTradeToPosition(
     .order('created_at', { ascending: false })
     .limit(1);
 
-  const openPositions = data as unknown as any[];
+  const openPositions = data as unknown as Position[];
   const existingPos = openPositions?.[0];
 
   // Option multiplier (100 shares per contract)
@@ -51,9 +52,9 @@ export async function linkTradeToPosition(
     const premiumKept = (tType === 'STO' || tType === 'SELL' || tType === 'SHORT') ? cashImpact : 0;
     const costBasis = (tType === 'BTO' || tType === 'BUY' || tType === 'COVER') ? cashImpact : 0;
 
-    const insertData: any = {
+    const insertData: Database['public']['Tables']['positions']['Insert'] = {
       user_id: trade.user_id,
-      asset_type: assetType,
+      asset_type: assetType as 'OPTION' | 'EQUITY',
       symbol: trade.symbol,
       underlying_symbol: trade.symbol,
       strategy: strategy || (isOption ? (side === 'LONG' ? 'Long Option' : 'Short Option') : (side === 'LONG' ? 'Long Stock' : 'Short Stock')),
@@ -74,12 +75,12 @@ export async function linkTradeToPosition(
       insertData.option_type = trade.option_type;
     }
 
-    const { data: newPos, error } = await (supabase.from('positions') as any).insert(insertData).select().single();
+    const { data: newPos, error } = await supabase.from('positions').insert(insertData).select().single();
     if (error) {
       console.error('Error creating position:', error);
       return null;
     }
-    return (newPos as any).id;
+    return newPos.id;
 
   } else {
     // 3. UPDATE EXISTING POSITION
@@ -137,7 +138,7 @@ export async function linkTradeToPosition(
 
     const uniqueTags = Array.from(new Set([...(pos.tags || []), ...(trade.tags || [])]));
 
-    const { error } = await (supabase.from('positions') as any)
+    const { error } = await supabase.from('positions')
       .update({
         status: newStatus,
         total_fees: Number(pos.total_fees || 0) + (trade.fees || 0),

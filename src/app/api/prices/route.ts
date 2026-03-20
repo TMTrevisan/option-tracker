@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server';
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { NextResponse } from 'next/server';
 
+export const revalidate = 60; // Cache for 60 seconds
+
 /**
  * GET /api/prices
  * Returns a unified map of symbol → live market data from Robinhood via SnapTrade.

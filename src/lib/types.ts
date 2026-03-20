@@ -23,6 +23,10 @@ export interface Position {
   underlying_symbol?: string;
   strategy?: string;
   status: PositionStatus;
+  side?: 'LONG' | 'SHORT';
+  strike_price?: number;
+  expiration_date?: string;
+  option_type?: 'CALL' | 'PUT';
   adjusted_cost_basis: number;
   total_premium_kept: number;
   total_fees: number;
