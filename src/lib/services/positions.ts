@@ -76,8 +76,7 @@ export async function linkTradeToPosition(
       insertData.option_type = trade.option_type;
     }
 
-    // @ts-ignore
-    const { data: newPos, error } = await supabase.from('positions').insert(insertData as any).select().single();
+    const { data: newPos, error } = await (supabase.from('positions') as any).insert(insertData as any).select().single();
     if (error) {
       console.error('Error creating position:', error);
       return null;
@@ -140,8 +139,7 @@ export async function linkTradeToPosition(
 
     const uniqueTags = Array.from(new Set([...(pos.tags || []), ...(trade.tags || [])]));
 
-    // @ts-ignore
-    const { error } = await supabase.from('positions')
+    const { error } = await (supabase.from('positions') as any)
       .update({
         status: newStatus,
         total_fees: Number(pos.total_fees || 0) + (trade.fees || 0),
