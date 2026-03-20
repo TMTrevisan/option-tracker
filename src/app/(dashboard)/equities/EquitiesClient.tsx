@@ -23,6 +23,10 @@ type Position = {
   asset_type: string;
   strategy?: string;
   status: string;
+  side?: string;
+  strike_price?: number;
+  expiration_date?: string;
+  option_type?: string;
   realized_pl?: number;
   total_fees?: number;
   adjusted_cost_basis?: number;
