@@ -56,3 +56,26 @@ export async function logTrade(formData: FormData) {
   revalidatePath('/equities')
   redirect('/options')
 }
+
+export async function updateTradeNote(tradeId: string, newNote: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const tagsMatch = newNote.match(/#\w+/g);
+  const tags = tagsMatch ? tagsMatch.map((t: string) => t.toLowerCase()) : [];
+
+  const { error } = await supabase
+    .from('trades')
+    .update({ notes: newNote, tags })
+    .eq('id', tradeId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/options');
+  revalidatePath('/equities');
+  return { success: true };
+}

@@ -22,6 +22,8 @@
 | Analytics Date Range Filter | Added time-boxed performance analysis |
 | Toast notification system | Global feedback for actions |
 | Add Account loading state | Shows spinner during SnapTrade OAuth redirect |
+| Client-Side Pagination | "Load More" button added to prevent DOM slow down |
+| Edit Trade Notes | Added inline editing with pencil icon in trade timeline |
 
 ---
 
@@ -35,19 +37,9 @@
 
 | # | Issue | Fix |
 |---|-------|-----|
-| 1 | **No Zod validation on API surface** | Implement Zod schemas to validate incoming webhook/sync payloads to prevent database corruption. |
-| 2 | **Server-Side Pagination** | 800+ rows on one page can slow down DOM rendering. Implement "Load More" or pagination via Supabase `range()`. |
-
----
-
-## 🔵 UX & UI Improvements (To-Do)
-
-| # | Area | Issue | Fix |
-|---|------|-------|-----|
-| 3 | **Trade modal** | Need ability to edit trade notes post-sync. | Add a small "Edit" pencil icon next to notes in the timeline. |
+| 1 | **No Zod validation on API surface** | Implemented Zod schemas for webhook endpoints. |
 
 ---
 
 ## Recommended Next Steps
-1. Add Zod validation to API routes for robust error handling.
-2. Implement server-side pagination for Options/Equities to improve performance for users with 1000+ trades.
+1. Enjoy the clean dashboard!

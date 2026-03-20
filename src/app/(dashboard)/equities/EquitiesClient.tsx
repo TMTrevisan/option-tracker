@@ -156,6 +156,7 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
   const [sortKey, setSortKey] = useState<'symbol' | 'strategy' | 'qty' | 'cost' | 'status' | 'pl'>('symbol');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [renderLimit, setRenderLimit] = useState(50);
 
   const toggleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -196,6 +197,8 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
       return 0;
     });
   }, [positions, search, statusFilter, accountFilter, dateRange, sortKey, sortDir]);
+  
+  const visiblePositions = filtered.slice(0, renderLimit);
 
   const totalRealizedPL = positions.filter(p => p.status === 'CLOSED').reduce((s, p) => s + (p.realized_pl ?? 0), 0);
   const totalCostBasis = positions.filter(p => p.status === 'OPEN').reduce((s, p) => s + (p.adjusted_cost_basis ?? 0), 0);
@@ -278,7 +281,7 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {visiblePositions.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '4rem 2rem' }}>
                     <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
@@ -296,7 +299,7 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
                     </div>
                   </td>
                 </tr>
-              ) : filtered.map(pos => (
+              ) : visiblePositions.map(pos => (
                 <tr key={pos.id} onClick={() => setSelectedPosition(pos)} style={{ borderBottom: '1px solid var(--border-light)', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                   <td style={{ padding: '1rem 1.5rem', fontWeight: 700 }}>{pos.symbol}</td>
                   <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>{pos.strategy || 'Long Stock'}</td>
@@ -315,6 +318,18 @@ export default function EquitiesClient({ positions, accounts = [] }: { positions
             </tbody>
           </table>
         </div>
+        
+        {filtered.length > renderLimit && (
+          <div style={{ padding: '1.5rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <button 
+              onClick={() => setRenderLimit(l => l + 50)}
+              className="btn btn-secondary" 
+              style={{ fontSize: '0.85rem', padding: '0.6rem 1.5rem' }}
+            >
+              Load More ({filtered.length - renderLimit} remaining)
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

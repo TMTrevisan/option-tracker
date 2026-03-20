@@ -1,12 +1,13 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap, Plus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap, Plus, Pencil, Check } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 import { useToast } from '@/components/ToastProvider';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { calculateGreeks, getDTE } from '@/lib/utils/greeks';
 import CSVExportButton from '@/components/CSVExportButton';
+import { updateTradeNote } from '@/app/(dashboard)/log-trade/actions';
 
 type LiveQuote = {
   price?: number;
@@ -120,6 +121,8 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
 
   const handleDelete = async () => {
     if (!confirmDelete) {
@@ -244,15 +247,51 @@ function PositionModal({ position, onClose, livePrices }: { position: Position; 
                     ⊖ ${(trade.fees!).toFixed(2)} fees
                   </div>
                 )}
-                <div style={{ paddingLeft: '1.25rem', marginBottom: trade.notes ? '0.4rem' : 0 }}>
+                <div style={{ paddingLeft: '1.25rem', marginBottom: '0.4rem' }}>
                   <TradeChip trade={trade} />
                 </div>
-                {trade.notes && (
-                  <div style={{ marginLeft: '1.25rem', marginTop: '0.4rem', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', padding: '0.55rem 0.875rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)', display: 'flex', gap: '0.5rem' }}>
-                    <span>📄</span>
-                    <span>{trade.notes}</span>
-                  </div>
-                )}
+                <div style={{ marginLeft: '1.25rem', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {editingNote === trade.id ? (
+                    <div style={{ display: 'flex', gap: '0.5rem', width: '100%', alignItems: 'center' }}>
+                      <input 
+                        type="text" 
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        autoFocus
+                        onKeyDown={async (e) => {
+                          if (e.key === 'Enter') {
+                            setEditingNote(null);
+                            await updateTradeNote(trade.id, noteText);
+                            router.refresh();
+                          } else if (e.key === 'Escape') {
+                            setEditingNote(null);
+                          }
+                        }}
+                        style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: '6px', padding: '0.4rem 0.75rem', fontSize: '0.78rem', color: '#fff', outline: 'none' }}
+                      />
+                      <button 
+                        onClick={async () => {
+                          setEditingNote(null);
+                          await updateTradeNote(trade.id, noteText);
+                          router.refresh();
+                        }}
+                        style={{ background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '6px', padding: '0.4rem', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div 
+                      style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', padding: '0.55rem 0.875rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)', display: 'flex', gap: '0.5rem', position: 'relative', cursor: 'pointer' }}
+                      onClick={() => { setEditingNote(trade.id); setNoteText(trade.notes || ''); }}
+                      title="Click to edit notes"
+                    >
+                      <span>📄</span>
+                      <span>{trade.notes || 'Add a note...'}</span>
+                      <Pencil size={12} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.3 }} />
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -386,6 +425,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
   const [livePrices, setLivePrices] = useState<Record<string, LiveQuote>>({});
   const [pricesLoading, setPricesLoading] = useState(true);
+  const [renderLimit, setRenderLimit] = useState(50);
 
   useEffect(() => {
     fetch('/api/prices')
@@ -473,6 +513,8 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
 
     return entries;
   }, [filtered, sortKey, sortDir]);
+
+  const visibleGroups = sortedGroups.slice(0, renderLimit);
 
   const totalRealizedPL = filtered.reduce((s, p) => s + (p.realized_pl ?? 0), 0);
   const totalOpenPL = useMemo(() => {
@@ -589,7 +631,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
           </div>
         </div>
 
-        {sortedGroups.length === 0 ? (
+        {visibleGroups.length === 0 ? (
           <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'rgba(255,255,255,0.4)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <BookOpen size={24} style={{ color: 'rgba(255,255,255,0.3)' }} />
@@ -611,7 +653,7 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
             )}
           </div>
         ) : (
-          sortedGroups.map(([symbol, symbolPositions]) => {
+          visibleGroups.map(([symbol, symbolPositions]) => {
             const ytdPL = symbolPositions.reduce((s, p) => {
               let openPL = 0;
               if (p.status === 'OPEN') {
@@ -637,6 +679,18 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
               />
             );
           })
+        )}
+        
+        {sortedGroups.length > renderLimit && (
+          <div style={{ padding: '1.5rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <button 
+              onClick={() => setRenderLimit(l => l + 50)}
+              className="btn btn-secondary" 
+              style={{ fontSize: '0.85rem', padding: '0.6rem 1.5rem' }}
+            >
+              Load More Tickers ({sortedGroups.length - renderLimit} remaining)
+            </button>
+          </div>
         )}
       </div>
     </>
