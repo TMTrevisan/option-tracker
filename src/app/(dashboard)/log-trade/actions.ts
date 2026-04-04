@@ -4,7 +4,22 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { linkTradeToPosition } from '@/lib/services/positions'
+
+import { z } from 'zod'
 import { Database } from '@/lib/types'
+
+const TradeSchema = z.object({
+  trade_type: z.enum(['BUY', 'SELL', 'BTO', 'STC', 'STO', 'BTC', 'ASSIGNMENT', 'EXERCISE']),
+  symbol: z.string().min(1).max(12).transform(s => s.toUpperCase()),
+  quantity: z.preprocess((val) => Number(val), z.number().int().positive()),
+  price: z.preprocess((val) => Number(val), z.number().nonnegative()),
+  fees: z.preprocess((val) => Number(val || 0), z.number().nonnegative()),
+  trade_date: z.string(),
+  strike_price: z.preprocess((val) => val ? Number(val) : undefined, z.number().positive().optional()),
+  expiration_date: z.string().optional(),
+  option_type: z.enum(['CALL', 'PUT']).optional(),
+  notes: z.string().optional(),
+})
 
 type TradeInsert = Database['public']['Tables']['trades']['Insert']
 
@@ -18,18 +33,28 @@ export async function logTrade(formData: FormData) {
 
   const strategy = formData.get('strategy') as string;
 
+  const rawData = {
+    trade_type: formData.get('trade_type'),
+    symbol: formData.get('symbol'),
+    strike_price: formData.get('strike_price') || undefined,
+    expiration_date: formData.get('expiration_date') || undefined,
+    option_type: formData.get('option_type') || undefined,
+    quantity: formData.get('quantity'),
+    price: formData.get('price'),
+    fees: formData.get('fees') || '0',
+    trade_date: formData.get('trade_date'),
+    notes: formData.get('notes'),
+  }
+
+  const result = TradeSchema.safeParse(rawData);
+  if (!result.success) {
+    console.error('Validation error:', result.error);
+    redirect(`/log-trade?error=Invalid trade data: ${result.error.issues[0].message}`);
+  }
+
   const tradeData: TradeInsert = {
     user_id: user.id,
-    trade_type: formData.get('trade_type') as TradeInsert['trade_type'],
-    symbol: formData.get('symbol') as string,
-    strike_price: formData.get('strike_price') ? parseFloat(formData.get('strike_price') as string) : undefined,
-    expiration_date: formData.get('expiration_date') ? (formData.get('expiration_date') as string) : undefined,
-    option_type: formData.get('option_type') ? (formData.get('option_type') as 'CALL' | 'PUT') : undefined,
-    quantity: parseInt(formData.get('quantity') as string, 10),
-    price: parseFloat(formData.get('price') as string),
-    fees: parseFloat(formData.get('fees') as string || '0'),
-    trade_date: formData.get('trade_date') as string,
-    notes: formData.get('notes') as string,
+    ...result.data,
   }
 
   // Phase 5 Parsing: Extract #tags from notes

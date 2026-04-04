@@ -1,25 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { Snaptrade } from 'snaptrade-typescript-sdk';
-import { NextResponse } from 'next/server';
 import { linkTradeToPosition } from '@/lib/services/positions';
+import { autoClassifyStrategy } from '@/lib/utils/classification';
+import { NextResponse } from 'next/server';
 
 // Auth guard — Vercel sends CRON_SECRET in Authorization header
 function authorized(req: Request) {
   const auth = req.headers.get('authorization');
   return auth === `Bearer ${process.env.CRON_SECRET}`;
-}
-
-// Strategy helper (same as in sync/route.ts)
-function classifyStrategy(tradeType: string, optionType: string | null): string {
-  const tt = tradeType.toUpperCase();
-  const ot = (optionType || '').toUpperCase();
-  if (ot === 'CALL' && tt === 'BUY') return 'Long Call';
-  if (ot === 'CALL' && tt === 'SELL') return 'Covered Call';
-  if (ot === 'PUT' && tt === 'SELL') return 'Short Put';
-  if (ot === 'PUT' && tt === 'BUY') return 'Long Put';
-  if (tt === 'BUY') return 'Long Stock';
-  if (tt === 'SELL') return 'Short Stock';
-  return 'Option Trade';
 }
 
 export async function GET(req: Request) {
@@ -38,19 +26,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Missing SnapTrade config' }, { status: 500 });
   }
 
-  // Fetch all users who have a snaptrade_secret in their metadata
-  const { data: users } = await supabase.auth.admin.listUsers();
-  const eligibleUsers = (users?.users || []).filter(
-    (u: any) => u.user_metadata?.snaptrade_secret
-  );
+  // Fetch all users who have a snaptrade_secret in the private table
+  const { data: eligibleUsers } = await supabase
+    .from('private_user_secrets')
+    .select('user_id, snaptrade_secret');
 
   let totalInserted = 0;
   let totalSkipped = 0;
   const errors: string[] = [];
 
-  for (const user of eligibleUsers) {
+  for (const userRecord of (eligibleUsers || [])) {
     try {
-      const secret = user.user_metadata.snaptrade_secret;
+      const userId = userRecord.user_id;
+      const secret = userRecord.snaptrade_secret;
       const snaptrade = new Snaptrade({ clientId, consumerKey });
 
       // Use yesterday's date as the rolling sync window (last 2 days for buffer)
@@ -59,14 +47,14 @@ export async function GET(req: Request) {
       const startDateStr = startDate.toISOString().slice(0, 10);
 
       const accountsRes = await snaptrade.accountInformation.listUserAccounts({
-        userId: user.id,
+        userId: userId,
         userSecret: secret,
       });
       const accounts = accountsRes.data || [];
 
       const fetchPromises = accounts.map((account: any) =>
         snaptrade.accountInformation.getAccountActivities({
-          userId: user.id,
+          userId: userId,
           userSecret: secret,
           accountId: account.id,
           startDate: startDateStr,
@@ -102,7 +90,7 @@ export async function GET(req: Request) {
           }
 
           const tradeInsert: any = {
-            user_id: user.id,
+            user_id: userId,
             trade_type: tt,
             symbol: baseSymbol,
             quantity: qty,
@@ -116,10 +104,10 @@ export async function GET(req: Request) {
           };
           if (strike_price) tradeInsert.strike_price = strike_price;
           if (expiration_date) tradeInsert.expiration_date = expiration_date;
-          if (option_type) tradeInsert.option_type = option_type;
-
-          const strategy = classifyStrategy(tt, option_type);
-          const positionId = await linkTradeToPosition(supabase, tradeInsert, strategy);
+          if (option_type) (tradeInsert as any).option_type = option_type;
+          
+          const strategy = autoClassifyStrategy({ tradeType: tt, optionType: option_type, symbol: baseSymbol });
+          const positionId = await linkTradeToPosition(supabase, tradeInsert as any, strategy);
           if (positionId) tradeInsert.position_id = positionId;
 
           const { error } = await supabase.from('trades').insert(tradeInsert).select('id').single();
@@ -138,13 +126,13 @@ export async function GET(req: Request) {
         }
       }
     } catch (e: any) {
-      errors.push(`User ${user.id}: ${e.message}`);
+      errors.push(`User ${userRecord.user_id}: ${e.message}`);
     }
   }
 
   return NextResponse.json({
     success: true,
-    usersProcessed: eligibleUsers.length,
+    usersProcessed: (eligibleUsers || []).length,
     inserted: totalInserted,
     skipped: totalSkipped,
     errors,

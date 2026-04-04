@@ -1,38 +1,30 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { Menu, X } from 'lucide-react';
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { useUIStore } from '@/lib/store';
 
 export default function MobileSidebarWrapper({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+  const { sidebarOpen, setSidebarOpen } = useUIStore();
   const pathname = usePathname();
 
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+    setSidebarOpen(false);
+  }, [pathname, setSidebarOpen]);
 
-  // Lock body scroll when menu is open
   useEffect(() => {
-    if (open) {
+    if (sidebarOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => { document.body.style.overflow = 'unset'; };
-  }, [open]);
+  }, [sidebarOpen]);
 
   return (
     <>
-      <button 
-        className="mobile-menu-btn" 
-        onClick={() => setOpen(!open)}
-      >
-        {open ? <X size={24} /> : <Menu size={24} />}
-      </button>
+      {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
       
-      {open && <div className="mobile-overlay" onClick={() => setOpen(false)} />}
-      
-      <div className={`sidebar-container ${open ? 'open' : ''}`}>
+      <div className={`sidebar-container ${sidebarOpen ? 'open' : ''}`}>
         {children}
       </div>
     </>

@@ -2,6 +2,7 @@ import { TrendingUp, Target, Calendar, Bookmark, Plus } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
 import DashboardChart from '@/components/DashboardChart';
+import EmptyState from '@/components/EmptyState';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -83,7 +84,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+      <div className="responsive-stats-grid">
         <StatCard
           title="YTD P/L"
           value={`${ytdPL >= 0 ? '+' : ''}$${ytdPL.toFixed(2)}`}
@@ -91,6 +92,7 @@ export default async function DashboardPage() {
           icon={<TrendingUp size={20} color="#10b981" />}
           accent="#10b981"
           success={ytdPL > 0}
+          info="Total realized profit/loss for the current calendar year."
         />
         <StatCard
           title="YTD Win Rate"
@@ -98,6 +100,7 @@ export default async function DashboardPage() {
           subtitle={`${winCount} wins of ${closedPositions.length} closed`}
           icon={<Target size={20} color="#60a5fa" />}
           accent="#60a5fa"
+          info="Percentage of closed trades that were profitable."
         />
         <StatCard
           title="This Month"
@@ -106,6 +109,7 @@ export default async function DashboardPage() {
           icon={<Calendar size={20} color="#a78bfa" />}
           accent="#a78bfa"
           success={thisMonthPL > 0}
+          info="Rough estimate of gross sales/credits this month."
         />
         <StatCard
           title="Open Positions"
@@ -113,6 +117,7 @@ export default async function DashboardPage() {
           subtitle={`${allTrades.length} total trades synced`}
           icon={<Bookmark size={20} color="#fb923c" />}
           accent="#fb923c"
+          info="Number of positions currently alive in your portfolio."
         />
       </div>
 
@@ -130,10 +135,13 @@ export default async function DashboardPage() {
           </div>
 
           {allPositions.length === 0 ? (
-            <div style={{ backgroundColor: 'var(--bg-input)', borderRadius: 'var(--radius-md)', padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <p className="text-sm">No positions yet.</p>
-              <p className="text-xs" style={{ marginTop: '0.5rem' }}>Run Sync &amp; Import from the Brokerage page.</p>
-            </div>
+            <EmptyState 
+              icon={Target}
+              title="No Strategies Found"
+              description="Connect your brokerage or log a manual trade to see your strategy breakdown."
+              action={{ label: "Connect Brokerage", href: "/brokerage", icon: Bookmark }}
+              secondaryAction={{ label: "Log Trade", href: "/log-trade", icon: Plus }}
+            />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {Object.entries(strategyMap).slice(0, 8).map(([strat, count]) => (
@@ -158,9 +166,12 @@ export default async function DashboardPage() {
           </div>
 
           {upcomingExpirations.length === 0 ? (
-            <div style={{ backgroundColor: 'var(--bg-input)', borderRadius: 'var(--radius-md)', padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <p className="text-sm">No upcoming expirations.</p>
-            </div>
+            <EmptyState 
+              icon={Calendar}
+              title="No Upcoming Expirations"
+              description="All your option positions are currently distant or you have no open contracts."
+              action={{ label: "View All Options", href: "/options", icon: Target }}
+            />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {upcomingExpirations.map((pos) => {
@@ -199,9 +210,9 @@ export default async function DashboardPage() {
   );
 }
 
-function StatCard({ title, value, subtitle, icon, accent, success }: { title: string, value: string, subtitle: string, icon: React.ReactNode, accent: string, success?: boolean }) {
+function StatCard({ title, value, subtitle, icon, accent, success, info }: { title: string, value: string, subtitle: string, icon: React.ReactNode, accent: string, success?: boolean, info?: string }) {
   return (
-    <div className="card" style={{ position: 'relative', overflow: 'hidden', height: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div className="card" title={info} style={{ position: 'relative', overflow: 'hidden', height: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'center', cursor: info ? 'help' : 'default' }}>
       <div style={{ position: 'absolute', right: '-1.5rem', top: '50%', transform: 'translateY(-50%)', width: '100px', height: '100px', borderRadius: '50%', backgroundColor: accent, opacity: 0.1, zIndex: 0 }} />
       <div style={{ zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>

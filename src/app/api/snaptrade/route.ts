@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 
@@ -23,11 +24,33 @@ export async function GET() {
      consumerKey: consumerKey
   });
 
+  const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
-    let userSecret = user.user_metadata?.snaptrade_secret;
+    // 1. Try fetching from private table first
+    const { data: secretRecord } = await supabaseAdmin
+      .from('private_user_secrets')
+      .select('snaptrade_secret')
+      .eq('user_id', user.id)
+      .single();
+
+    let userSecret = secretRecord?.snaptrade_secret;
+
+    // 2. Fallback to metadata if migration hasn't moved it yet
+    if (!userSecret && user.user_metadata?.snaptrade_secret) {
+        userSecret = user.user_metadata.snaptrade_secret;
+        // Auto-migrate it to the new table
+        await supabaseAdmin.from('private_user_secrets').upsert({
+            user_id: user.id,
+            snaptrade_secret: userSecret
+        }, { onConflict: 'user_id' });
+    }
 
     if (!userSecret) {
-      // 1. Register User on SnapTrade
+      // 3. Register User on SnapTrade
       const registerResponse = await snaptrade.authentication.registerSnapTradeUser({ userId: user.id });
       userSecret = registerResponse.data?.userSecret;
 
@@ -35,10 +58,11 @@ export async function GET() {
         return NextResponse.json({ error: `SnapTrade registration failed. Raw response: ${JSON.stringify(registerResponse.data)}` }, { status: 500 });
       }
 
-      // Persist the secret to Supabase so we never query the quota again
-      await supabase.auth.updateUser({
-        data: { snaptrade_secret: userSecret }
-      });
+      // Persist the secret to the private table ONLY
+      await supabaseAdmin.from('private_user_secrets').upsert({
+        user_id: user.id,
+        snaptrade_secret: userSecret
+      }, { onConflict: 'user_id' });
     }
 
     // 2. Generate secure Connection Portal URL

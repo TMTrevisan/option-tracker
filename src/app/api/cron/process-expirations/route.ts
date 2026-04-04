@@ -44,13 +44,13 @@ export async function GET(request: Request) {
           const expDate = new Date(trades[0].expiration_date);
           
           if (expDate < today) {
-             // 2. Synthesize a zero-dollar closing trade to represent the worthless expiration
+             const isShort = pos.side === 'SHORT';
              const synthTrade: Database['public']['Tables']['trades']['Insert'] = {
                 user_id: pos.user_id,
                 position_id: pos.id,
-                trade_type: 'STC', // Abstract simplistic closing 
+                trade_type: isShort ? 'BTC' : 'STC',
                 symbol: pos.symbol,
-                quantity: 1, // Assume 1 for MVP iteration
+                quantity: pos.open_quantity || 1,
                 price: 0,
                 fees: 0,
                 trade_date: today.toISOString(),
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
              };
 
              await linkTradeToPosition(supabase, synthTrade);
-             // @ts-ignore - Bypass Supabase generic inference failure on vercel
+             // @ts-ignore
              await supabase.from('trades').insert(synthTrade as any);
              processedCount++;
           }

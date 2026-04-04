@@ -1,35 +1,29 @@
 import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 
-// DELETE /api/positions/[id]
 export async function DELETE(
-  _req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { id } = await params;
-
-  // First verify this position belongs to the user
-  const { data: pos } = await supabase
-    .from('positions')
-    .select('id, user_id')
-    .eq('id', id)
-    .single();
-
-  if (!pos || pos.user_id !== user.id) {
-    return NextResponse.json({ error: 'Position not found' }, { status: 404 });
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Unlink all trades from this position (don't delete the trades themselves)
+
+  // 1. Unlink trades associated with this position so they don't get deleted by cascade (if that's the desired behavior)
+  // Actually, in this app, positions are aggregations. If we delete the position, we probably want the trades to be orphaned 
+  // so they can be re-imported or re-linked if the user clears the cache.
   await supabase
     .from('trades')
     .update({ position_id: null })
-    .eq('position_id', id);
+    .eq('position_id', id)
+    .eq('user_id', user.id);
 
-  // Delete the position
+  // 2. Delete the position
   const { error } = await supabase
     .from('positions')
     .delete()
@@ -37,6 +31,7 @@ export async function DELETE(
     .eq('user_id', user.id);
 
   if (error) {
+    console.error('Delete position error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

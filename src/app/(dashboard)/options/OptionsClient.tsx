@@ -1,12 +1,13 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap, Plus, Pencil, Check } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, X, BookOpen, Trash2, Zap, Plus, Pencil, Check, Bookmark } from 'lucide-react';
 import DateRangeFilter, { DateRange, inDateRange } from '@/components/DateRangeFilter';
 import { useToast } from '@/components/ToastProvider';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { calculateGreeks, getDTE } from '@/lib/utils/greeks';
 import CSVExportButton from '@/components/CSVExportButton';
+import EmptyState from '@/components/EmptyState';
 import { updateTradeNote } from '@/app/(dashboard)/log-trade/actions';
 
 type LiveQuote = {
@@ -159,7 +160,7 @@ function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { 
       const prev = candidates[i];
       if (prev.closedAt) {
         const diffHours = Math.abs(current.openedAt - prev.closedAt) / (1000 * 60 * 60);
-        if (diffHours <= 72) { // Rolled within 3 days
+        if (diffHours <= 96) { // Rolled within 4 days (handles long weekends)
           chain.unshift(prev);
           current = prev;
         }
@@ -172,7 +173,7 @@ function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { 
       const next = candidates[i];
       if (current.closedAt) {
         const diffHours = Math.abs(next.openedAt - current.closedAt) / (1000 * 60 * 60);
-        if (diffHours <= 72) {
+        if (diffHours <= 96) {
           chain.push(next);
           current = next;
         }
@@ -275,6 +276,11 @@ function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { 
                 <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>OI <strong style={{ color: 'rgba(255,255,255,0.9)' }}>{live.open_interest.toLocaleString()}</strong></span>
               )}
             </div>
+            {!greeks && strike > 0 && expiration && (
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap', padding: '0.4rem 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>Greeks unavailable (requires live IV & underlying price)</span>
+              </div>
+            )}
             {greeks && (
               <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap', padding: '0.4rem 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                 <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)' }}>Δ <strong style={{ color: '#fff' }}>{greeks.delta.toFixed(3)}</strong></span>
@@ -306,10 +312,13 @@ function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { 
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {activeTab === 'trades' ? (
             trades.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: '0.875rem', padding: '2.5rem 0' }}>
-                <p>No trade executions linked to this position.</p>
-                <p style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>Run Sync &amp; Import to pull your full trade history.</p>
-              </div>
+              <EmptyState 
+                icon={Search}
+                title="No Trades Found"
+                description={"No trade executions linked to this position. Run Sync & Import to pull your full trade history."}
+                action={{ label: "Log Manual Trade", href: "/log-trade", icon: Plus }}
+                secondaryAction={{ label: "Sync Brokerage", href: "/brokerage", icon: Bookmark }}
+              />
             ) : trades.map((trade, i) => {
               const isBuy = /BTO|BUY|BTC|COVER/i.test(trade.trade_type);
               const isClose = /BTC|STC|COVER|SELL/i.test(trade.trade_type);
@@ -385,41 +394,139 @@ function PositionModal({ position, allSymbolPositions, onClose, livePrices }: { 
               );
             })
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'rgba(16,185,129,0.05)', borderRadius: '8px', border: '1px dashed rgba(16,185,129,0.2)' }}>
-                <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>Total Campaign Realized P/L</span>
-                <strong style={{ color: campaignRealized >= 0 ? '#10b981' : '#f87171', fontSize: '1rem' }}>{campaignRealized >= 0 ? '+' : ''}${campaignRealized.toFixed(2)}</strong>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Narrative insight box */}
+              {(() => {
+                const totalRolls = campaignPositions.length - 1;
+                const firstPos = campaignPositions[0];
+                const lastPos = campaignPositions[campaignPositions.length - 1];
+                const firstStrike = firstPos?.strike_price;
+                const lastStrike = lastPos?.strike_price;
+                const firstExp = firstPos?.expiration_date ? new Date(firstPos.expiration_date) : null;
+                const lastExp = lastPos?.expiration_date ? new Date(lastPos.expiration_date) : null;
+                const initialPremium = firstPos?.total_premium_kept ?? 0;
+                const netPremium = campaignPositions.reduce((s, p) => s + (p.realized_pl || 0), 0);
+                const isWin = netPremium >= 0;
+                const strikeMovement = firstStrike && lastStrike && firstStrike !== lastStrike
+                  ? (lastStrike > firstStrike ? `up from $${firstStrike.toFixed(0)} to $${lastStrike.toFixed(0)}`
+                    : `down from $${firstStrike.toFixed(0)} to $${lastStrike.toFixed(0)}`)
+                  : null;
+
+                return (
+                  <div className="campaign-narrative">
+                    {totalRolls === 0 ? (
+                      <span>This is a <strong>single-leg position</strong> with no roll history detected within the 96-hour window.</span>
+                    ) : (
+                      <>
+                        You've <strong>rolled this campaign {totalRolls}x</strong>
+                        {strikeMovement ? <>, moving your strike <strong>{strikeMovement}</strong></> : ''}
+                        {firstExp && lastExp && firstExp.getTime() !== lastExp.getTime()
+                          ? <> and extending expiration from <strong>{firstExp.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong> to <strong>{lastExp.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong></>
+                          : ''}.{' '}
+                        Net campaign P/L is <strong style={{ color: isWin ? '#10b981' : '#f43f5e' }}>
+                          {isWin ? '+' : ''}${netPremium.toFixed(2)}
+                        </strong>.
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Campaign Total P/L pill */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total Campaign Realized P/L</span>
+                <span className={`glow-pill ${campaignRealized >= 0 ? 'glow-pill-success' : 'glow-pill-danger'}`} style={{ fontSize: '0.875rem', padding: '0.3rem 0.875rem' }}>
+                  {campaignRealized >= 0 ? '+' : ''}${campaignRealized.toFixed(2)}
+                </span>
               </div>
-              
-              <div style={{ position: 'relative', paddingLeft: '1rem' }}>
-                <div style={{ position: 'absolute', left: '16px', top: '10px', bottom: '20px', width: '2px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                
-                {campaignPositions.map((campPos: any, i) => {
+
+              {/* Visual timeline */}
+              <div style={{ position: 'relative' }}>
+                {/* Vertical line */}
+                <div style={{ position: 'absolute', left: '13px', top: '14px', bottom: '14px', width: '2px', background: 'linear-gradient(to bottom, rgba(99,102,241,0.5), rgba(255,255,255,0.06))', borderRadius: '2px' }} />
+
+                {campaignPositions.map((campPos: any, i: number) => {
                   const isCurrent = campPos.id === position.id;
+                  const isLast = i === campaignPositions.length - 1;
                   const cpl = campPos.realized_pl || 0;
+                  const isWin = cpl >= 0;
                   const cexp = campPos.expiration_date ? new Date(campPos.expiration_date) : null;
-                  const cexpStr = cexp ? `${cexp.getMonth() + 1}/${cexp.getDate()}/${cexp.getFullYear().toString().slice(2)}` : '—';
-                  const dotColor = isCurrent ? '#3b82f6' : '#6b7280';
-                  
+                  const cexpStr = cexp
+                    ? cexp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+                    : '—';
+
+                  const dotBg = isCurrent ? '#6366f1'
+                    : campPos.status === 'CLOSED' ? (isWin ? '#10b981' : '#f43f5e')
+                    : '#3f3f46';
+
                   return (
-                    <div key={campPos.id} style={{ position: 'relative', paddingLeft: '1.5rem', marginBottom: '1.5rem' }}>
-                      <div style={{ position: 'absolute', left: '-5px', top: '4px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: dotColor, border: '2px solid #0f1117', zIndex: 2 }} />
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
-                        <div>
-                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: isCurrent ? '#fff' : 'rgba(255,255,255,0.6)' }}>
-                            {campPos.symbol} ${campPos.strike_price} {campPos.option_type}
-                          </span>
-                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginLeft: '0.5rem' }}>Exp: {cexpStr}</span>
-                          {isCurrent && <span style={{ marginLeft: '0.5rem', backgroundColor: 'rgba(59,130,246,0.2)', color: '#60a5fa', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700 }}>CURRENT</span>}
+                    <div key={campPos.id} style={{ display: 'flex', gap: '1rem', paddingBottom: isLast ? 0 : '1rem', position: 'relative' }}>
+                      {/* Dot */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 28 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '50%', background: dotBg,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.6rem', fontWeight: 800, color: '#fff',
+                          border: isCurrent ? '2px solid rgba(99,102,241,0.6)' : '2px solid rgba(255,255,255,0.06)',
+                          boxShadow: isCurrent ? '0 0 12px rgba(99,102,241,0.5)' : 'none',
+                          flexShrink: 0, zIndex: 2,
+                        }}>
+                          {i + 1}
                         </div>
-                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: cpl >= 0 ? '#10b981' : '#f87171', opacity: isCurrent ? 1 : 0.6 }}>
-                          {cpl >= 0 ? '+' : ''}${cpl.toFixed(2)}
-                        </span>
                       </div>
-                      
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
-                        {formatDate(campPos.openedAt)} — {campPos.closedAt ? formatDate(campPos.closedAt) : 'Open'}
+
+                      {/* Body card */}
+                      <div
+                        className={`campaign-node-body ${isCurrent ? 'is-current' : ''}`}
+                        style={{ borderLeft: `3px solid ${dotBg}`, marginBottom: 0 }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: isCurrent ? '#c7d2fe' : 'var(--text-primary)' }}>
+                              {campPos.symbol} ${campPos.strike_price} {campPos.option_type}
+                            </span>
+                            {isCurrent && (
+                              <span className="glow-pill glow-pill-indigo">Current</span>
+                            )}
+                            {campPos.status === 'ASSIGNED' && (
+                              <span className="glow-pill" style={{ background: 'rgba(168,85,247,0.1)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)' }}>Assigned</span>
+                            )}
+                          </div>
+                          {campPos.status !== 'OPEN' ? (
+                            <span className={`glow-pill ${isWin ? 'glow-pill-success' : 'glow-pill-danger'}`}>
+                              {isWin ? '+' : ''}${cpl.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="glow-pill" style={{ background: 'rgba(99,102,241,0.08)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)' }}>Open</span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            Exp <span style={{ color: 'var(--text-secondary)' }}>{cexpStr}</span>
+                          </span>
+                          {campPos.strategy && (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {campPos.strategy}
+                            </span>
+                          )}
+                          {campPos.total_fees > 0 && (
+                            <span style={{ fontSize: '0.72rem', color: '#f43f5e' }}>⊖ ${campPos.total_fees.toFixed(2)} fees</span>
+                          )}
+                        </div>
+
+                        {!isLast && (
+                          <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            <span>↓</span>
+                            <span>Rolled →</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                              ${campaignPositions[i + 1]?.strike_price}{' '}
+                              {campaignPositions[i + 1]?.expiration_date
+                                ? new Date(campaignPositions[i + 1].expiration_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                : ''}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -617,6 +724,8 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     return Array.from(set).sort();
   }, [positions]);
 
+
+
   const filtered = useMemo(() => {
     let arr = positions.filter(p => {
       if (search && !p.symbol.toLowerCase().includes(search.toLowerCase())) return false;
@@ -648,6 +757,10 @@ export default function OptionsClient({ positions, accounts = [] }: { positions:
     });
     return arr;
   }, [positions, search, statusFilter, strategyFilter, accountFilter, dateRange, sortKey, sortDir]);
+
+  const visiblePositions = useMemo(() => {
+    return filtered.slice(0, renderLimit);
+  }, [filtered, renderLimit]);
 
   const sortedGroups = useMemo(() => {
     // 1. Group positions by symbol

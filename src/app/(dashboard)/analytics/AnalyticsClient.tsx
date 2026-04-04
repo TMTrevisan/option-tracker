@@ -46,9 +46,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-function StatCard({ label, value, sub, icon, color }: { label: string; value: string; sub?: string; icon: React.ReactNode; color: string }) {
+function StatCard({ label, value, sub, icon, color, info }: { label: string; value: string; sub?: string; icon: React.ReactNode; color: string; info?: string }) {
   return (
-    <div className="card" style={{ padding: '1.25rem 1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+    <div className="card" title={info} style={{ padding: '1.25rem 1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', cursor: info ? 'help' : 'default' }}>
       <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: `${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', color, flexShrink: 0 }}>{icon}</div>
       <div>
         <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', fontWeight: 600, letterSpacing: '0.07em', marginBottom: '0.2rem' }}>{label}</div>
@@ -109,6 +109,31 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
   const avgLoss = losses.length > 0 ? losses.reduce((s, p) => s + (p.realized_pl || 0), 0) / losses.length : 0;
   const profitFactor = Math.abs(avgLoss) > 0 ? Math.abs(avgWin / avgLoss) : 0;
   const totalFees = filteredPositions.reduce((s, p) => s + (p.total_fees || 0), 0);
+
+  // --- Max Drawdown ---
+  const maxDrawdown = useMemo(() => {
+    // Collect all closed P/L points chronologically
+    const chronPoints = [...closed].sort((a, b) => {
+        const d1 = new Date(a.updated_at || a.created_at || 0).getTime();
+        const d2 = new Date(b.updated_at || b.created_at || 0).getTime();
+        return d1 - d2;
+    });
+
+    let peak = 0;
+    let runningPL = 0;
+    let maxDD = 0;
+
+    chronPoints.forEach(p => {
+        runningPL += (p.realized_pl || 0);
+        if (runningPL > peak) {
+            peak = runningPL;
+        }
+        const drawdown = peak - runningPL;
+        maxDD = Math.max(maxDD, drawdown);
+    });
+
+    return maxDD;
+  }, [closed]);
 
   // --- Streaks ---
   const streaks = useMemo(() => {
@@ -248,13 +273,14 @@ export default function AnalyticsClient({ positions, trades }: { positions: Posi
       </div>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem' }}>
-        <StatCard label="TOTAL P/L" value={`${totalPL >= 0 ? '+' : ''}$${totalPL.toFixed(2)}`} sub={`${closed.length} closed positions`} icon={<TrendingUp size={20} />} color={totalPL >= 0 ? '#10b981' : '#f87171'} />
-        <StatCard label="WIN RATE" value={`${winRate.toFixed(1)}%`} sub={`${wins.length}W · ${losses.length}L`} icon={<Target size={20} />} color="#60a5fa" />
-        <StatCard label="PROFIT FACTOR" value={profitFactor > 0 ? profitFactor.toFixed(2) : '—'} sub={`Avg win $${avgWin.toFixed(0)} · Avg loss $${Math.abs(avgLoss).toFixed(0)}`} icon={<Award size={20} />} color="#a78bfa" />
-        <StatCard label="STREAK" value={streaks.current} sub={`Max: ${streaks.maxWin}W · ${streaks.maxLoss}L`} icon={<Zap size={20} />} color="#f43f5e" />
-        <StatCard label="AVG DTE" value={`${avgDTE} days`} sub="At position open" icon={<Clock size={20} />} color="#38bdf8" />
-        <StatCard label="TOTAL FEES" value={`$${totalFees.toFixed(2)}`} sub="All time" icon={<AlertTriangle size={20} />} color="#f59e0b" />
+      <div className="responsive-stats-grid-7">
+        <StatCard label="TOTAL P/L" value={`${totalPL >= 0 ? '+' : ''}$${totalPL.toFixed(2)}`} sub={`${closed.length} closed`} icon={<TrendingUp size={18} />} color={totalPL >= 0 ? '#10b981' : '#f87171'} info="Sum of all realized profit and loss from closed positions." />
+        <StatCard label="WIN RATE" value={`${winRate.toFixed(1)}%`} sub={`${wins.length}W · ${losses.length}L`} icon={<Target size={18} />} color="#60a5fa" info="Percentage of closed positions that resulted in a profit." />
+        <StatCard label="MAX DD" value={`$${maxDrawdown.toFixed(2)}`} sub="Max peak-to-trough" icon={<AlertTriangle size={18} />} color="#f87171" info="The largest absolute drop in your cumulative P/L curve from a previous peak." />
+        <StatCard label="P. FACTOR" value={profitFactor > 0 ? profitFactor.toFixed(2) : '—'} sub="Win/Loss ratio" icon={<Award size={18} />} color="#a78bfa" info="The ratio of gross profit to gross loss. A value > 1.0 means you are profitable." />
+        <StatCard label="STREAK" value={streaks.current} sub={`Max: ${streaks.maxWin}W`} icon={<Zap size={18} />} color="#f43f5e" info="Your current consecutive win/loss count, and all-time record." />
+        <StatCard label="AVG DTE" value={`${avgDTE}d`} sub="At open" icon={<Clock size={18} />} color="#38bdf8" info="Average Days to Expiration for option positions at the time they were opened." />
+        <StatCard label="FEES" value={`$${totalFees.toFixed(0)}`} sub="Total paid" icon={<Zap size={18} />} color="#f59e0b" info="Total commissions and regulatory fees paid across all trades." />
       </div>
 
       {/* Row 2: Monthly bars + rolling line */}

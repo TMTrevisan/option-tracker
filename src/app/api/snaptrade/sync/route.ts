@@ -1,7 +1,18 @@
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { NextResponse } from 'next/server';
 import { linkTradeToPosition } from '@/lib/services/positions';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
+const redis = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
+  ? new Redis({ url: process.env.KV_REST_API_URL, token: process.env.KV_REST_API_TOKEN })
+  : null;
+const ratelimit = redis ? new Ratelimit({
+  redis: redis,
+  limiter: Ratelimit.slidingWindow(5, '1 m'),
+}) : null;
 
 // Auto-classify strategy from trade type + option type
 // In a sync, we don't know if it's opening or closing yet.
@@ -43,6 +54,15 @@ export async function POST(req: Request) {
 
         if (!user) throw new Error('Unauthorized User Configuration');
 
+        if (ratelimit) {
+          const { success } = await ratelimit.limit(`sync_${user.id}`);
+          if (!success) {
+            pushLog("❌ Rate Limit Exceeded: Please wait a minute before syncing again.");
+            controller.close();
+            return;
+          }
+        }
+
         if (forceResync) {
           pushLog("! FORCE RESYNC: Wiping existing history to rebuild from scratch...");
           // Delete all trades and positions for this user
@@ -53,7 +73,27 @@ export async function POST(req: Request) {
 
         const clientId = process.env.SNAPTRADE_CLIENT_ID?.trim();
         const consumerKey = process.env.SNAPTRADE_CONSUMER_KEY?.trim();
-        const secret = user.user_metadata?.snaptrade_secret;
+
+        const supabaseAdmin = createAdminClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+
+        const { data: secretRecord } = await supabaseAdmin
+          .from('private_user_secrets')
+          .select('snaptrade_secret')
+          .eq('user_id', user.id)
+          .single();
+
+        let secret = secretRecord?.snaptrade_secret;
+
+        if (!secret && user.user_metadata?.snaptrade_secret) {
+            secret = user.user_metadata.snaptrade_secret;
+            await supabaseAdmin.from('private_user_secrets').upsert({
+                user_id: user.id,
+                snaptrade_secret: secret
+            }, { onConflict: 'user_id' });
+        }
 
         if (!clientId || !consumerKey || !secret) {
           throw new Error('Missing strict SnapTrade cryptographic configuration.');
@@ -67,7 +107,27 @@ export async function POST(req: Request) {
         
         if (accounts.length === 0) throw new Error('No brokerage accounts bound to profile.');
 
-        pushLog(`> Discovered ${accounts.length} active Brokerage Profile(s).`);
+        pushLog(`> Discovered ${accounts.length} active Brokerage Profile(s). Synchronizing to database...`);
+
+        // Upsert accounts to ensure foreign key constraints pass
+        const accountUpserts = accounts.map(acc => ({
+            id: acc.id,
+            user_id: user.id,
+            name: acc.name || acc.institution_name || 'SnapTrade Account',
+            broker: acc.institution_name || 'SnapTrade',
+            account_number: acc.number || String(acc.id).substring(0, 8),
+            balance: acc.balance?.total?.amount || 0,
+            is_manual: false
+        }));
+
+        const { error: accountUpsertError } = await supabase
+          .from('brokerage_accounts')
+          .upsert(accountUpserts, { onConflict: 'id' });
+        
+        if (accountUpsertError) {
+            pushLog(`! Warning: Failed to upsert brokerage accounts: ${accountUpsertError.message}`);
+        }
+
         pushLog("> Initiating high-speed concurrent ledger scrape...");
 
         let allRawActivities: any[] = [];
@@ -114,16 +174,20 @@ export async function POST(req: Request) {
             return;
         }
 
-        // IMPORTANT: Filter trades and sort by date ASCENDING so we process them in chronological order
+        const parseDate = (d: any) => new Date(d || 0).getTime();
+        const startMillis = startDate ? new Date(startDate).getTime() : 0;
+
+        // IMPORTANT: Filter trades, apply startDate strictly, and sort by date ASCENDING
         const validTrades = allRawActivities
-          .filter((a: any) => a.type && /BUY|SELL/i.test(a.type))
-          .sort((a, b) => {
-            const dateA = new Date(a.trade_date || a.settlement_date || 0).getTime();
-            const dateB = new Date(b.trade_date || b.settlement_date || 0).getTime();
-            return dateA - dateB;
-          });
+          .filter((a: any) => {
+             const isTrade = a.type && /BUY|SELL/i.test(a.type);
+             const activityTime = parseDate(a.trade_date || a.settlement_date);
+             // strictly enforce startDate fallback
+             return isTrade && activityTime >= startMillis;
+          })
+          .sort((a, b) => parseDate(a.trade_date || a.settlement_date) - parseDate(b.trade_date || b.settlement_date));
         
-        pushLog(`> Siphoned ${validTrades.length} executable trade records (Bypassed ${allRawActivities.length - validTrades.length} Non-Trade Transfers/Dividends).`);
+        pushLog(`> Siphoned ${validTrades.length} executable trade records after applying date filters.`);
         pushLog(`> Routing executions into Roll Engine...`);
 
         let insertedCount = 0;

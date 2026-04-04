@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database, Position } from '../types';
+import { autoClassifyStrategy } from '../utils/classification';
 
 type TradeInsert = Database['public']['Tables']['trades']['Insert'];
 
@@ -57,7 +58,7 @@ export async function linkTradeToPosition(
       asset_type: assetType as 'OPTION' | 'EQUITY',
       symbol: trade.symbol,
       underlying_symbol: trade.symbol,
-      strategy: strategy || (isOption ? (side === 'LONG' ? 'Long Option' : 'Short Option') : (side === 'LONG' ? 'Long Stock' : 'Short Stock')),
+      strategy: strategy || autoClassifyStrategy({ tradeType: tType, optionType: oType, assetType: assetType as 'EQUITY' | 'OPTION', symbol: trade.symbol || '' }),
       status: 'OPEN',
       side: side,
       adjusted_cost_basis: costBasis,
